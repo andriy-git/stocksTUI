@@ -49,6 +49,19 @@ class CacheTestDataUpdated(Message):
     def __init__(self, data: list[dict], total_time: float) -> None:
         self.data, self.total_time = data, total_time; super().__init__()
 
+class PortfolioChanged(Message):
+    """Posted when the selected portfolio changes."""
+    def __init__(self, portfolio_id: str) -> None:
+        self.portfolio_id = portfolio_id
+        super().__init__()
+
+class PortfolioDataUpdated(Message):
+    """Posted when portfolio data has been updated."""
+    def __init__(self, portfolio_id: str, tickers: list[str]) -> None:
+        self.portfolio_id = portfolio_id
+        self.tickers = tickers
+        super().__init__()
+
 class NotEmpty(Validator):
     def validate(self, value: str) -> ValidationResult:
         if value.strip(): return self.success()

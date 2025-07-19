@@ -38,15 +38,13 @@ Tabs .underline--bar {
 
 /* Main content area where different views (price table, news, history) are displayed */
 #output-container {
-  overflow: auto; /* Enables scrolling if content overflows */
+  layout: vertical;
   height: 1fr; /* Takes up all available vertical space */
-  scrollbar-color: $panel; /* Color of the scrollbar track */
-  scrollbar-color-hover: $accent; /* Color of the scrollbar thumb on hover */
 }
 
 #price-table {
   width: 1fr; /* Let table fill the width */
-  height: auto; /* Height adjusts to content */
+  height: 1fr; /* Let table fill the remaining vertical space */
 }
 
 #debug-table {
@@ -332,4 +330,108 @@ Markdown .strong > .code {
 
 Footer {
   align-horizontal: right;
+}
+
+/* Portfolio selector styling */
+#portfolio-container {
+  height: auto;
+  padding: 1;
+  background: $surface;
+  border-bottom: solid $primary;
+}
+
+#portfolio-selector-container {
+  layout: horizontal;
+  height: 3;
+  align: center middle;
+}
+
+#portfolio-label {
+  width: auto;
+  padding-right: 1;
+  color: $foreground;
+  align: center middle;
+}
+
+#portfolio-selector {
+  width: 30;
+  margin-right: 2;
+}
+
+#manage-portfolios {
+  width: auto;
+}
+
+.vertical-center {
+  align: center middle;
+  height: 1fr;
+}
+
+.spacer {
+  height: 1;
+}
+
+/* Tag Filter Widget Styles */
+#tag-filter {
+  height: 12;
+  padding: 0 1;
+  margin-bottom: 1;
+}
+
+#tag-filter-controls {
+  height: auto;
+  width: 100%;
+  align: left middle;
+}
+
+.tag-filter-label {
+  width: auto;
+  height: 8;
+  margin-right: 1;
+  color: $text-muted;
+  content-align: center middle;
+}
+
+.tag-buttons-container {
+  layout: grid;
+  grid-size: 5 2;
+  width: 1fr;
+  height: 8;
+}
+
+.tag-button {
+  width: 1fr;
+  height: 4;
+  margin: 0 1 1 0;
+  min-width: 12;
+  padding: 0 2;
+  color: $text;
+  background: $surface;
+  border: solid $primary;
+}
+
+.tag-button:hover {
+  background: $surface-lighten-1;
+  color: $text;
+}
+
+.tag-button.-primary {
+  background: $primary;
+  color: $background;
+}
+
+#clear-filter-button {
+  width: auto;
+  min-width: 8;
+  height: 3;
+  margin-left: 2;
+}
+
+#filter-status {
+  width: 100%;
+  height: 3;
+  margin-top: 1;
+  padding: 1;
+  color: $text;
+  background: $surface;
 }

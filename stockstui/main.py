@@ -18,7 +18,7 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.actions import SkipAction
 from textual.containers import Container, Horizontal, Vertical
-from textual.dom import NoMatches
+from textual.css.query import NoMatches
 from textual.reactive import reactive
 from textual.theme import Theme
 from textual.widgets import (Button, Checkbox, DataTable, Footer,
@@ -34,8 +34,11 @@ from platformdirs import PlatformDirs
 from stockstui.config_manager import ConfigManager
 from stockstui.common import (PriceDataUpdated, NewsDataUpdated,
                               TickerDebugDataUpdated, ListDebugDataUpdated, CacheTestDataUpdated,
-                              MarketStatusUpdated, HistoricalDataUpdated, TickerInfoComparisonUpdated)
+                              MarketStatusUpdated, HistoricalDataUpdated, TickerInfoComparisonUpdated,
+                              PortfolioChanged, PortfolioDataUpdated)
+from stockstui.data_providers.portfolio import PortfolioManager
 from stockstui.ui.widgets.search_box import SearchBox
+from stockstui.ui.widgets.tag_filter import TagFilterWidget, TagFilterChanged
 from stockstui.ui.views.config_view import ConfigView
 from stockstui.ui.views.history_view import HistoryView
 from stockstui.ui.views.news_view import NewsView
@@ -143,6 +146,8 @@ class StocksTUI(App):
     news_ticker = reactive(None)
     history_ticker = reactive(None)
     search_target_table = reactive(None)
+    selected_portfolio = reactive("default")
+    active_tag_filter = reactive([])
 
     def __init__(self, cli_overrides: dict | None = None):
         """
@@ -163,6 +168,9 @@ class StocksTUI(App):
         
         # Initialize the database manager for the persistent cache.
         self.db_manager = DbManager(self.config.db_path)
+        
+        # Initialize the portfolio manager
+        self.portfolio_manager = PortfolioManager(self.config)
         
         # --- Pre-populate in-memory caches from persistent DB cache ---
         market_provider.populate_price_cache(self.db_manager.load_price_cache_from_db())
@@ -212,6 +220,7 @@ class StocksTUI(App):
                 yield Label("Last Refresh: Never", id="last-refresh-time")
         yield Footer()
 
+    
     def on_mount(self) -> None:
         """
         Called when the app is first mounted.
@@ -282,6 +291,81 @@ class StocksTUI(App):
                 if ticker and alias:
                     alias_map[ticker] = alias
         return alias_map
+
+    def _get_available_tags_for_category(self, category: str) -> list[str]:
+        """Gets all available tags from tickers in the specified category."""
+        from stockstui.utils import parse_tags
+        
+        all_tags = set()
+        
+        lists_to_check = []
+        if category == 'all':
+            lists_to_check.extend(self.config.lists.values())
+        elif category in self.config.lists:
+            lists_to_check.append(self.config.lists[category])
+
+        for list_data in lists_to_check:
+            for item in list_data:
+                tags_str = item.get('tags', '')
+                if tags_str and isinstance(tags_str, str):
+                    tags = parse_tags(tags_str)
+                    all_tags.update(tags)
+        
+        return sorted(list(all_tags))
+
+    def _filter_symbols_by_tags(self, category: str, symbols: list[str]) -> list[str]:
+        """Filters symbols by active tag filter."""
+        from stockstui.utils import parse_tags, match_tags
+        
+        if not self.active_tag_filter:
+            return symbols  # No filter applied, return all symbols
+        
+        filtered_symbols = []
+        
+        if category == 'all':
+            # Need to check all lists for tag matching
+            for list_data in self.config.lists.values():
+                for item in list_data:
+                    ticker = item.get('ticker')
+                    if ticker in symbols:
+                        item_tags_str = item.get('tags', '')
+                        item_tags = parse_tags(item_tags_str) if item_tags_str else []
+                        if match_tags(item_tags, self.active_tag_filter):
+                            filtered_symbols.append(ticker)
+        else:
+            # Check specific list for tag matching
+            list_data = self.config.lists.get(category, [])
+            for item in list_data:
+                ticker = item.get('ticker')
+                if ticker in symbols:
+                    item_tags_str = item.get('tags', '')
+                    item_tags = parse_tags(item_tags_str) if item_tags_str else []
+                    if match_tags(item_tags, self.active_tag_filter):
+                        filtered_symbols.append(ticker)
+
+        logging.info(f"Filtered symbols: {filtered_symbols}")
+        
+        return list(set(filtered_symbols))  # Remove duplicates
+
+    def _update_tag_filter_status(self) -> None:
+        """Updates the tag filter status display with current counts."""
+        try:
+            tag_filter = self.query_one("#tag-filter")
+            category = self.get_active_category()
+            
+            if category and category not in ["history", "news", "debug", "configs"]:
+                # Get total symbols count
+                if category == 'all':
+                    total_symbols = list(set(s['ticker'] for lst in self.config.lists.values() for s in lst))
+                else:
+                    total_symbols = [s['ticker'] for s in self.config.lists.get(category, [])]
+                
+                # Get filtered symbols count
+                filtered_symbols = self._filter_symbols_by_tags(category, total_symbols)
+                
+                tag_filter.update_filter_status(len(filtered_symbols), len(total_symbols))
+        except NoMatches:
+            pass
 
     def _load_and_register_themes(self):
         """
@@ -488,6 +572,8 @@ class StocksTUI(App):
         - force: If True, bypasses the smart expiry cache for all symbols.
         """
         self.fetch_market_status(self.config.get_setting("market_calendar", "NYSE"))
+
+        logging.info("ACTION REFRESH")
         
         category = self.get_active_category()
         if category and category not in ["history", "news", "debug", "configs"]:
@@ -495,6 +581,11 @@ class StocksTUI(App):
                 symbols = list(set(s['ticker'] for lst in self.config.lists.values() for s in lst))
             else:
                 symbols = [s['ticker'] for s in self.config.lists.get(category, [])]
+            
+            logging.info("Applying tag filter")
+
+            # Apply tag filtering
+            symbols = self._filter_symbols_by_tags(category, symbols)
 
             if symbols:
                 try:
@@ -615,7 +706,14 @@ class StocksTUI(App):
         elif category == 'debug':
             await output_container.mount(DebugView())
         else: # This is a price view for 'all' or a specific list
+            # Add tag filter widget for all and stocks views
+            if category in ['all', 'stocks']:
+                available_tags = self._get_available_tags_for_category(category)
+                tag_filter = TagFilterWidget(available_tags=available_tags, id="tag-filter")
+                await output_container.mount(tag_filter)
+
             await output_container.mount(DataTable(id="price-table", zebra_stripes=True))
+
             price_table = self.query_one("#price-table", DataTable)
             price_table.add_column("Description", key="Description")
             price_table.add_column("Price", key="Price")
@@ -623,17 +721,21 @@ class StocksTUI(App):
             price_table.add_column("% Change", key="% Change")
             price_table.add_column("Day's Range", key="Day's Range")
             price_table.add_column("52-Wk Range", key="52-Wk Range")
-            price_table.add_column("Ticker", key="Ticker")
+            price_table.add_column("Ticker", key="Ticker")            
 
             if category == 'all':
                 symbols = list(set(s['ticker'] for lst in self.config.lists.values() for s in lst))
             else:
                 symbols = [s['ticker'] for s in self.config.lists.get(category, [])]
             
+            # Apply tag filtering
+            symbols = self._filter_symbols_by_tags(category, symbols)
+            
             if symbols and not any(market_provider.is_cached(s) for s in symbols):
                 price_table.loading = True
                 self.fetch_prices(symbols, force=False, category=category)
-            else:
+            elif symbols:
+                # We have symbols, try to get cached data
                 cached_data = [price for s in symbols if (price := market_provider.get_cached_price(s))]
                 if cached_data:
                     alias_map = self._get_alias_map()
@@ -642,8 +744,13 @@ class StocksTUI(App):
                     rows = formatter.format_price_data_for_table(cached_data, self._price_comparison_data, alias_map)
                     self._style_and_populate_price_table(price_table, rows)
                     self._apply_price_table_sort()
-                elif not symbols:
-                    price_table.add_row(f"[dim]No symbols in list '{category}'[/dim]")
+                else:
+                    # We have symbols but no cached data, fetch them
+                    price_table.loading = True
+                    self.fetch_prices(symbols, force=False, category=category)
+            else:
+                # No symbols in the list
+                price_table.add_row(f"[dim]No symbols in list '{category}'. Add some in the Configs tab.[/dim]")
 
     @work(exclusive=True, thread=True)
     def fetch_prices(self, symbols: list[str], force: bool, category: str):
@@ -785,12 +892,28 @@ class StocksTUI(App):
             dt.loading = False
             dt.clear()
             
-            symbols_on_screen = {s['ticker'] for lst in self.config.lists.values() for s in lst} if active_category == 'all' else {s['ticker'] for s in self.config.lists.get(active_category, [])}
-            data_for_table = [item for item in message.data if item['symbol'] in symbols_on_screen]
+            if active_category == 'all':
+                symbols_on_screen = list(set(s['ticker'] for lst in self.config.lists.values() for s in lst))
+            else:
+                symbols_on_screen = [s['ticker'] for s in self.config.lists.get(active_category, [])]
+            
+            # Apply tag filtering to symbols_on_screen
+            filtered_symbols = self._filter_symbols_by_tags(active_category, symbols_on_screen)
+            filtered_symbols_set = set(filtered_symbols)
+            
+            data_for_table = [item for item in message.data if item['symbol'] in filtered_symbols_set]
 
-            if not data_for_table and symbols_on_screen:
-                 dt.add_row("[dim]Could not fetch data for any symbols in this list.[/dim]")
-                 return
+            if not data_for_table:
+                if filtered_symbols:
+                    # We expected data but couldn't fetch it
+                    dt.add_row("[dim]Could not fetch data for any symbols in this list.[/dim]")
+                elif symbols_on_screen and not filtered_symbols:
+                    # No symbols match the current tag filter
+                    dt.add_row("[dim]No symbols match the current tag filter.[/dim]")
+                else:
+                    # No symbols in the list
+                    dt.add_row(f"[dim]No symbols in list '{active_category}'. Add some in the Configs tab.[/dim]")
+                return
 
             alias_map = self._get_alias_map()
             rows = formatter.format_price_data_for_table(data_for_table, self._price_comparison_data, alias_map)
@@ -1011,7 +1134,8 @@ class StocksTUI(App):
         self._history_sort_column_key = None; self._history_sort_reverse = False
         
         active_category = self.get_active_category()
-        await self._display_data_for_category(active_category)
+        if active_category:
+            await self._display_data_for_category(active_category)
 
         self.action_refresh()
 
@@ -1025,10 +1149,11 @@ class StocksTUI(App):
     @on(DataTable.RowSelected, "#price-table")
     def on_main_datatable_row_selected(self, event: DataTable.RowSelected):
         """When a row is selected on the price table, set it as the active ticker for other views."""
-        if event.row_key.value: 
+        if event.row_key.value:
             self.news_ticker = event.row_key.value
             self.history_ticker = event.row_key.value
             self.notify(f"Selected {self.news_ticker} for news/history tabs.")
+    
 
     @on(DataTable.HeaderSelected, "#price-table")
     def on_price_table_header_selected(self, event: DataTable.HeaderSelected) -> None:
@@ -1178,6 +1303,17 @@ class StocksTUI(App):
         """Removes the search box when the user presses Enter."""
         try: self.query_one(SearchBox).remove()
         except NoMatches: pass
+    
+    @on(TagFilterChanged)
+    def on_tag_filter_changed(self, message: TagFilterChanged) -> None:
+        """Handles TagFilterChanged messages from the tag filter widget."""
+        logging.info(f"TagFilterChanged message received: {message.tags}")
+        self.active_tag_filter = message.tags
+        # Refresh the current view to apply the new filter
+        self.action_refresh()
+        # Update filter status after refresh
+        self._update_tag_filter_status()
+    
     #endregion
 
 def show_manual():

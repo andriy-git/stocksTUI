@@ -40,6 +40,10 @@ class ConfigManager:
         self.settings: dict = self._load_or_create('settings.json')
         self.lists: dict = self._load_or_create('lists.json')
         self.themes: dict = self._load_or_create('themes.json')
+        self.portfolios: dict = self._load_or_create('portfolios.json')
+        
+        # Migrate existing stocks to default portfolio on first run
+        self._migrate_stocks_to_default_portfolio()
 
     def _load_or_create(self, filename: str) -> dict:
         """
@@ -106,3 +110,38 @@ class ConfigManager:
 
     def save_lists(self):
         self._atomic_save('lists.json', self.lists)
+    
+    def save_portfolios(self):
+        self._atomic_save('portfolios.json', self.portfolios)
+    
+    def _migrate_stocks_to_default_portfolio(self):
+        """Migrate existing stocks from lists to default portfolio if needed."""
+        if 'portfolios' not in self.portfolios:
+            return
+        
+        # Check if migration was already done by looking for a migration flag
+        if self.portfolios.get('settings', {}).get('migration_completed'):
+            return
+            
+        default_portfolio = self.portfolios['portfolios'].get('default', {})
+        
+        # Only migrate if default portfolio is empty
+        if not default_portfolio.get('tickers'):
+            # Get all tickers from the 'stocks' list
+            stocks_list = self.lists.get('stocks', [])
+            if stocks_list:
+                tickers = [item['ticker'] for item in stocks_list if 'ticker' in item]
+                if tickers:
+                    import datetime
+                    now = datetime.datetime.now().isoformat() + 'Z'
+                    default_portfolio['tickers'] = tickers
+                    default_portfolio['created'] = now
+                    default_portfolio['modified'] = now
+                    self.portfolios['portfolios']['default'] = default_portfolio
+                    logging.info(f"Migrated {len(tickers)} stocks to default portfolio")
+        
+        # Set migration flag to prevent future migrations
+        if 'settings' not in self.portfolios:
+            self.portfolios['settings'] = {}
+        self.portfolios['settings']['migration_completed'] = True
+        self.save_portfolios()

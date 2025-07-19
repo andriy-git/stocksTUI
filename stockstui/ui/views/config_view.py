@@ -84,7 +84,7 @@ class ConfigView(Vertical):
     def on_mount(self) -> None:
         """Called when the ConfigView is mounted. Sets up initial static state."""
         # Add columns to the ticker DataTable
-        self.query_one("#ticker-table", DataTable).add_columns("Ticker", "Alias", "Note")
+        self.query_one("#ticker-table", DataTable).add_columns("Ticker", "Alias", "Note", "Tags")
         # Note: The main App class is responsible for populating dynamic values from config.
 
     def _update_list_highlight(self) -> None:
@@ -103,7 +103,7 @@ class ConfigView(Vertical):
     def _populate_ticker_table(self):
         """
         Populates the ticker DataTable with symbols from the currently active list.
-        Applies theme-based styling to the 'Note' column.
+        Applies theme-based styling to the 'Note' and 'Tags' columns.
         """
         table = self.query_one("#ticker-table", DataTable)
         table.clear()
@@ -116,7 +116,9 @@ class ConfigView(Vertical):
                 alias = item.get('alias', ticker) # Use ticker as alias if not specified
                 note_raw = item.get('note') or 'N/A'
                 note_text = Text(note_raw, style=muted_color if note_raw == 'N/A' else "")
-                table.add_row(ticker, alias, note_text, key=ticker) # Use ticker as row key
+                tags_raw = item.get('tags') or 'N/A'
+                tags_text = Text(tags_raw, style=muted_color if tags_raw == 'N/A' else "")
+                table.add_row(ticker, alias, note_text, tags_text, key=ticker) # Use ticker as row key
 
     @on(ListView.Selected)
     def on_list_view_selected(self, event: ListView.Selected):
@@ -201,14 +203,14 @@ class ConfigView(Vertical):
             self.app.notify("Select a list first.", severity="warning")
             return
 
-        def on_close(result: tuple[str, str, str] | None):
+        def on_close(result: tuple[str, str, str, str] | None):
             if result:
-                ticker, alias, note = result
+                ticker, alias, note, tags = result
                 # Check for duplicate tickers in the current list
                 if any(t['ticker'].upper() == ticker.upper() for t in self.app.config.lists[category]):
                     self.app.notify(f"Ticker '{ticker}' already exists in this list.", severity="error")
                     return
-                self.app.config.lists[category].append({"ticker": ticker, "alias": alias, "note": note})
+                self.app.config.lists[category].append({"ticker": ticker, "alias": alias, "note": note, "tags": tags})
                 self.app.config.save_lists()
                 self._populate_ticker_table()
                 self.app.notify(f"Ticker '{ticker}' added.")
@@ -303,10 +305,11 @@ class ConfigView(Vertical):
         original_ticker = extract_cell_text(table.get_cell_at((table.cursor_row, 0)))
         original_alias = extract_cell_text(table.get_cell_at((table.cursor_row, 1)))
         original_note = extract_cell_text(table.get_cell_at((table.cursor_row, 2)))
+        original_tags = extract_cell_text(table.get_cell_at((table.cursor_row, 3)))
 
-        def on_close(result: tuple[str, str, str] | None):
+        def on_close(result: tuple[str, str, str, str] | None):
             if result:
-                new_ticker, new_alias, new_note = result
+                new_ticker, new_alias, new_note, new_tags = result
                 # Check for duplicate tickers (excluding the original ticker being edited)
                 is_duplicate = any(item['ticker'].upper() == new_ticker.upper() for item in self.app.config.lists[self.app.active_list_category] if item['ticker'].upper() != original_ticker.upper())
                 if is_duplicate:
@@ -318,11 +321,14 @@ class ConfigView(Vertical):
                         item['ticker'] = new_ticker
                         item['alias'] = new_alias
                         item['note'] = new_note
+                        item['tags'] = new_tags
                         break
                 self.app.config.save_lists()
                 self._populate_ticker_table()
                 self.app.notify(f"Ticker '{original_ticker}' updated.")
-        self.app.push_screen(EditTickerModal(original_ticker, original_alias, original_note), on_close)
+        # Handle backward compatibility for tags
+        display_tags = original_tags if original_tags != 'N/A' else ""
+        self.app.push_screen(EditTickerModal(original_ticker, original_alias, original_note, display_tags), on_close)
 
     @on(Button.Pressed, "#delete_ticker")
     def on_delete_ticker_pressed(self):
