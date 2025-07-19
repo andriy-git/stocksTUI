@@ -1,0 +1,15 @@
+{
+    "portfolios": {
+        "default": {
+            "name": "Default Portfolio",
+            "description": "Main portfolio containing all stocks",
+            "tickers": [],
+            "created": "",
+            "modified": ""
+        }
+    },
+    "settings": {
+        "default_portfolio": "default",
+        "auto_add_to_default": true
+    }
+}
