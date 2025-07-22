@@ -1,4 +1,4 @@
-import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 import copy
 import json
@@ -24,6 +24,8 @@ from textual.theme import Theme
 from textual.widgets import (Button, Checkbox, DataTable, Footer,
                              Input, Label, ListView, ListItem,
                              Select, Static, Tab, Tabs, Markdown, Switch, RadioButton)
+# FIX: Directly import the CellDoesNotExist exception.
+from textual.widgets.data_table import CellDoesNotExist
 from textual.widget import Widget
 from textual import on, work
 from rich.text import Text
@@ -120,6 +122,7 @@ class StocksTUI(App):
         Binding("R", "refresh(True)", "Force Refresh", show=True),
         Binding("s", "enter_sort_mode", "Sort", show=True),
         Binding("/", "focus_search", "Search", show=True),
+        Binding("f", "toggle_tag_filter", "Filter", show=True),
         Binding("?", "toggle_help", "Toggle Help", show=True),
         Binding("i", "focus_input", "Input", show=False),
         Binding("d", "handle_sort_key('d')", "Sort by Description/Date", show=False),
@@ -162,7 +165,8 @@ class StocksTUI(App):
         
         # ConfigManager now needs the path to the package root to find default_configs
         self.config = ConfigManager(Path(__file__).resolve().parent)
-        self.refresh_timer = None
+        self.price_refresh_timer = None
+        self.market_status_timer = None
         # This dictionary holds the last known prices to compare against for flashing.
         self._price_comparison_data = {}
         
@@ -192,6 +196,9 @@ class StocksTUI(App):
         self._history_period = "1mo"
         self._sort_mode = False
         self._original_status_text = None
+        # HACK: Flags to manage cursor restoration on refresh vs. filter changes.
+        self._pre_refresh_cursor_key = None
+        self._is_filter_refresh = False
         
         # --- Handle CLI Overrides ---
         # If --session-list is used, create temporary lists for this session only.
@@ -264,15 +271,18 @@ class StocksTUI(App):
         if self.cli_overrides.get('period'):
             self._history_period = self.cli_overrides['period']
 
-        # Perform initial setup and data fetch.
+        # Perform initial setup and start the independent refresh loops.
         self.call_after_refresh(self._rebuild_app, new_active_category=start_category)
-        self.call_after_refresh(self._manage_refresh_timer)
-        self.call_after_refresh(self.action_refresh)
+        self.call_after_refresh(self._start_refresh_loops)
         
     def on_unmount(self) -> None:
         """
         Clean up background tasks and save all caches to the database on exit.
         """
+        # Stop any running timers to prevent tasks from running after exit.
+        if self.price_refresh_timer: self.price_refresh_timer.stop()
+        if self.market_status_timer: self.market_status_timer.stop()
+        
         # Save both price and info caches to the persistent DB.
         self.db_manager.save_price_cache_to_db(market_provider.get_price_cache_state())
         self.db_manager.save_info_cache_to_db(market_provider.get_info_cache_state())
@@ -281,6 +291,16 @@ class StocksTUI(App):
         self.workers.cancel_all()
 
     #region UI and App State Management
+    def _start_refresh_loops(self) -> None:
+        """Kicks off the independent refresh cycles for prices and market status."""
+        # Initial price refresh
+        self.action_refresh()
+        # Start the price auto-refresh timer if configured
+        self._manage_price_refresh_timer()
+        # Start the smart market status refresh loop
+        calendar = self.config.get_setting("market_calendar", "NYSE")
+        self.fetch_market_status(calendar)
+
     def _get_alias_map(self) -> dict[str, str]:
         """Creates a mapping from ticker symbol to its user-defined alias."""
         alias_map = {}
@@ -314,38 +334,41 @@ class StocksTUI(App):
         return sorted(list(all_tags))
 
     def _filter_symbols_by_tags(self, category: str, symbols: list[str]) -> list[str]:
-        """Filters symbols by active tag filter."""
+        """
+        Filters symbols by active tag filter, preserving original order and handling duplicates.
+        """
         from stockstui.utils import parse_tags, match_tags
         
         if not self.active_tag_filter:
             return symbols  # No filter applied, return all symbols
         
-        filtered_symbols = []
+        # This set tracks tickers we've already added to avoid duplicates in the 'all' view.
+        seen_symbols = set()
+        ordered_filtered_symbols = []
         
+        # Iterate through all configured lists to respect the user-defined order.
+        lists_to_check = []
         if category == 'all':
-            # Need to check all lists for tag matching
-            for list_data in self.config.lists.values():
-                for item in list_data:
-                    ticker = item.get('ticker')
-                    if ticker in symbols:
-                        item_tags_str = item.get('tags', '')
-                        item_tags = parse_tags(item_tags_str) if item_tags_str else []
-                        if match_tags(item_tags, self.active_tag_filter):
-                            filtered_symbols.append(ticker)
-        else:
-            # Check specific list for tag matching
-            list_data = self.config.lists.get(category, [])
+            lists_to_check.extend(self.config.lists.values())
+        elif category in self.config.lists:
+            lists_to_check.append(self.config.lists.get(category, []))
+
+        # We iterate through the original config lists to get the correct order.
+        for list_data in lists_to_check:
             for item in list_data:
                 ticker = item.get('ticker')
-                if ticker in symbols:
+                # Check if this ticker is in our target list and we haven't already processed it.
+                if ticker in symbols and ticker not in seen_symbols:
                     item_tags_str = item.get('tags', '')
                     item_tags = parse_tags(item_tags_str) if item_tags_str else []
                     if match_tags(item_tags, self.active_tag_filter):
-                        filtered_symbols.append(ticker)
+                        ordered_filtered_symbols.append(ticker)
+                    # Mark as seen to handle duplicates from the 'all' view correctly.
+                    seen_symbols.add(ticker)
 
-        logging.info(f"Filtered symbols: {filtered_symbols}")
+        logging.info(f"Filtered symbols (ordered): {ordered_filtered_symbols}")
         
-        return list(set(filtered_symbols))  # Remove duplicates
+        return ordered_filtered_symbols
 
     def _update_tag_filter_status(self) -> None:
         """Updates the tag filter status display with current counts."""
@@ -527,17 +550,59 @@ class StocksTUI(App):
             raise SkipAction()
         self.copy_to_clipboard(selection)
 
-    def _manage_refresh_timer(self):
-        """Starts or stops the auto-refresh timer based on the user's config."""
-        if self.refresh_timer:
-            self.refresh_timer.stop()
+    def _manage_price_refresh_timer(self):
+        """Starts or stops the auto-refresh timer for prices based on the user's config."""
+        if self.price_refresh_timer:
+            self.price_refresh_timer.stop()
         if self.config.get_setting("auto_refresh", False):
             try:
                 interval = float(self.config.get_setting("refresh_interval", 300.0))
                 # Auto-refresh should always be a "smart" refresh, not a force refresh.
-                self.refresh_timer = self.set_interval(interval, lambda: self.action_refresh(force=False))
+                self.price_refresh_timer = self.set_interval(interval, lambda: self.action_refresh(force=False))
             except (ValueError, TypeError):
                 logging.error("Invalid refresh interval.")
+    
+    def _schedule_next_market_status_refresh(self, status: dict):
+        """
+        Calculates the next poll interval for the market status and sets a timer.
+        This creates a self-adjusting "smart" refresh cycle.
+        """
+        if self.market_status_timer:
+            self.market_status_timer.stop()
+
+        now = datetime.now(timezone.utc)
+        next_open = status.get('next_open')
+        next_close = status.get('next_close')
+        current_status = status.get('status')
+
+        # Default interval: 5 minutes
+        interval = 300.0
+
+        if current_status == 'open' and next_close:
+            time_to_close = (next_close - now).total_seconds()
+            if time_to_close <= 900:  # Within 15 minutes of closing
+                interval = 30  # High frequency
+            else:
+                interval = 300 # Normal open-market frequency
+        elif current_status == 'closed' and next_open:
+            time_to_open = (next_open - now).total_seconds()
+            if 0 < time_to_open <= 900: # Within 15 minutes of opening
+                interval = 30 # High frequency
+            elif 900 < time_to_open <= 3600 * 2: # Within 2 hours of opening
+                interval = 300 # Medium frequency
+            else: # Market is closed for a long time
+                interval = 3600 # Low frequency (1 hour)
+
+        # Ensure interval is not negative and has a minimum value
+        interval = max(interval, 5.0)
+
+        logging.info(f"Market status is '{current_status}'. Scheduling next poll in {interval:.2f} seconds.")
+
+        calendar = self.config.get_setting("market_calendar", "NYSE")
+        self.market_status_timer = self.set_timer(
+            interval,
+            lambda: self.fetch_market_status(calendar)
+        )
 
     def _populate_symbol_list_view(self):
         """Populates the list of symbol categories in the Config view."""
@@ -568,17 +633,13 @@ class StocksTUI(App):
     
     def action_refresh(self, force: bool = False):
         """
-        Refreshes data for the current view.
+        Refreshes price data for the current view.
         - force: If True, bypasses the smart expiry cache for all symbols.
         """
-        self.fetch_market_status(self.config.get_setting("market_calendar", "NYSE"))
-
-        logging.info("ACTION REFRESH")
-        
         category = self.get_active_category()
         if category and category not in ["history", "news", "debug", "configs"]:
             if category == 'all':
-                symbols = list(set(s['ticker'] for lst in self.config.lists.values() for s in lst))
+                symbols = list(s['ticker'] for lst in self.config.lists.values() for s in lst)
             else:
                 symbols = [s['ticker'] for s in self.config.lists.get(category, [])]
             
@@ -604,6 +665,32 @@ class StocksTUI(App):
             self.action_hide_help_panel()
         else:
             self.action_show_help_panel()
+            
+    def action_toggle_tag_filter(self) -> None:
+        """Toggles the visibility of the tag filter widget if it has tags."""
+        category = self.get_active_category()
+        if category and category in ["history", "news", "debug", "configs"]:
+            self.bell() # Not applicable in these views
+            return
+
+        try:
+            tag_filter = self.query_one("#tag-filter", TagFilterWidget)
+            # Only allow toggling if there are tags to filter by.
+            if not tag_filter.available_tags:
+                self.notify("No tags available for this list.", severity="information")
+                self.bell()
+                return
+
+            tag_filter.display = not tag_filter.display
+            if tag_filter.display:
+                try:
+                    # If there are any filter buttons, focus the first one
+                    first_button = tag_filter.query_one(".tag-button", Button)
+                    first_button.focus()
+                except NoMatches:
+                    pass # No tags, nothing to focus
+        except NoMatches:
+            self.bell() # No tag filter widget on this view
 
     def action_move_cursor(self, direction: str) -> None:
         """
@@ -706,10 +793,12 @@ class StocksTUI(App):
         elif category == 'debug':
             await output_container.mount(DebugView())
         else: # This is a price view for 'all' or a specific list
-            # Add tag filter widget for all and stocks views
-            if category in ['all', 'stocks']:
+            # Add tag filter widget for all price views. It's hidden by default and toggled via keybind.
+            if category not in ["history", "news", "debug", "configs"]:
                 available_tags = self._get_available_tags_for_category(category)
+                # The widget is created but initially hidden. It can be toggled with the 'f' key.
                 tag_filter = TagFilterWidget(available_tags=available_tags, id="tag-filter")
+                tag_filter.display = False # Initially hidden
                 await output_container.mount(tag_filter)
 
             await output_container.mount(DataTable(id="price-table", zebra_stripes=True))
@@ -724,7 +813,7 @@ class StocksTUI(App):
             price_table.add_column("Ticker", key="Ticker")            
 
             if category == 'all':
-                symbols = list(set(s['ticker'] for lst in self.config.lists.values() for s in lst))
+                symbols = list(s['ticker'] for lst in self.config.lists.values() for s in lst)
             else:
                 symbols = [s['ticker'] for s in self.config.lists.get(category, [])]
             
@@ -876,7 +965,8 @@ class StocksTUI(App):
     @on(PriceDataUpdated)
     async def on_price_data_updated(self, message: PriceDataUpdated):
         """Handles the arrival of new price data from a worker."""
-        now_str = f"Last Refresh: {datetime.datetime.now():%H:%M:%S}"
+        # FIX: Use the correct `datetime.now()` call after changing the import.
+        now_str = f"Last Refresh: {datetime.now():%H:%M:%S}"
         if message.category == 'all':
             for cat in list(self.config.lists.keys()) + ['all']:
                 self._last_refresh_times[cat] = now_str
@@ -889,25 +979,42 @@ class StocksTUI(App):
 
         try:
             dt = self.query_one("#price-table", DataTable)
+            
+            # --- START: Cursor Preservation Logic ---
+            self._pre_refresh_cursor_key = None
+            if not self._is_filter_refresh and dt.row_count > 0 and dt.cursor_row >= 0:
+                try:
+                    self._pre_refresh_cursor_key = dt.get_row_key(dt.cursor_row)
+                except KeyError:
+                    self._pre_refresh_cursor_key = None
+            # --- END: Cursor Preservation Logic ---
+
             dt.loading = False
             dt.clear()
             
+            # --- FIX: Start of order-preserving logic ---
+            # 1. Determine the correct, ordered list of symbols that should be on screen.
             if active_category == 'all':
-                symbols_on_screen = list(set(s['ticker'] for lst in self.config.lists.values() for s in lst))
+                # For 'all', we iterate through lists in config order to build the base symbol list.
+                # Duplicates are implicitly handled by _filter_symbols_by_tags.
+                symbols_on_screen = [s['ticker'] for lst in self.config.lists.values() for s in lst]
             else:
                 symbols_on_screen = [s['ticker'] for s in self.config.lists.get(active_category, [])]
-            
-            # Apply tag filtering to symbols_on_screen
-            filtered_symbols = self._filter_symbols_by_tags(active_category, symbols_on_screen)
-            filtered_symbols_set = set(filtered_symbols)
-            
-            data_for_table = [item for item in message.data if item['symbol'] in filtered_symbols_set]
+
+            ordered_filtered_symbols = self._filter_symbols_by_tags(active_category, symbols_on_screen)
+
+            # 2. Create a mapping from symbol to its data for efficient lookup.
+            data_map = {item['symbol']: item for item in message.data}
+
+            # 3. Build the final data list in the correct order.
+            data_for_table = [data_map[symbol] for symbol in ordered_filtered_symbols if symbol in data_map]
+            # --- FIX: End of order-preserving logic ---
 
             if not data_for_table:
-                if filtered_symbols:
+                if ordered_filtered_symbols:
                     # We expected data but couldn't fetch it
                     dt.add_row("[dim]Could not fetch data for any symbols in this list.[/dim]")
-                elif symbols_on_screen and not filtered_symbols:
+                elif symbols_on_screen and not ordered_filtered_symbols:
                     # No symbols match the current tag filter
                     dt.add_row("[dim]No symbols match the current tag filter.[/dim]")
                 else:
@@ -929,11 +1036,23 @@ class StocksTUI(App):
             
             self._apply_price_table_sort()
             self.query_one("#last-refresh-time").update(now_str)
+
+            # --- START: Cursor Restoration Logic ---
+            if self._pre_refresh_cursor_key:
+                try:
+                    new_row_index = dt.get_row_index(self._pre_refresh_cursor_key)
+                    dt.move_cursor(row=new_row_index)
+                except KeyError:
+                    pass # The previously selected row no longer exists, do nothing.
+            
+            self._is_filter_refresh = False # Reset the flag after the refresh is complete
+            # --- END: Cursor Restoration Logic ---
+
         except NoMatches: pass
     
     @on(MarketStatusUpdated)
     async def on_market_status_updated(self, message: MarketStatusUpdated):
-        """Handles the arrival of new market status data."""
+        """Handles the arrival of new market status data and schedules the next poll."""
         try:
             status_parts = formatter.format_market_status(message.status)
             if not status_parts:
@@ -952,6 +1071,9 @@ class StocksTUI(App):
                 text.append(f" ({holiday_display})", style=self.theme_variables.get("text-muted", "dim"))
             
             self.query_one("#market-status").update(text)
+            
+            # This is the key part of the new feature: schedule the next check.
+            self._schedule_next_market_status_refresh(message.status)
         except NoMatches: pass
 
     @on(HistoricalDataUpdated)
@@ -1116,7 +1238,8 @@ class StocksTUI(App):
         try:
             dt = self.query_one("#price-table", DataTable)
             dt.update_cell(row_key, column_key, original_content, update_width=False)
-        except (KeyError, NoMatches, DataTable.CellDoesNotExist):
+        # FIX: Catch the correctly imported exception.
+        except (KeyError, NoMatches, CellDoesNotExist):
             pass
     #endregion
 
@@ -1309,6 +1432,8 @@ class StocksTUI(App):
         """Handles TagFilterChanged messages from the tag filter widget."""
         logging.info(f"TagFilterChanged message received: {message.tags}")
         self.active_tag_filter = message.tags
+        # Set the flag to true so the cursor resets on the upcoming refresh.
+        self._is_filter_refresh = True
         # Refresh the current view to apply the new filter
         self.action_refresh()
         # Update filter status after refresh
