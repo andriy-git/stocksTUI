@@ -97,9 +97,12 @@ def get_market_price_data(tickers: list[str], force_refresh: bool = False) -> li
 
 def _fetch_and_cache_slow_data(tickers: list[str]):
     if not tickers: return
+    # Let yfinance handle its own session management for optimal performance.
     ticker_objects = yf.Tickers(" ".join(tickers))
     for ticker in tickers:
         try:
+            # Although we iterate, yfinance's Tickers object uses threading
+            # internally to fetch data for all tickers in the background efficiently.
             slow_info = ticker_objects.tickers[ticker].info
             fast_info = ticker_objects.tickers[ticker].fast_info
             
@@ -185,7 +188,10 @@ def get_historical_data(ticker: str, period: str, interval: str = "1d"):
         data = yf.Ticker(ticker).history(period=period, interval=interval)
         if not data.empty: data.attrs['symbol'] = ticker.upper()
         return data
-    except Exception:
+    except Exception as e:
+        # HACK: yfinance sometimes raises errors for valid tickers with no data in range.
+        # Log the actual error for debugging, but return an empty dataframe.
+        logging.error(f"yfinance error fetching history for {ticker} ({period}): {e}")
         df.attrs['error'] = 'Data Error'
         return df
 
