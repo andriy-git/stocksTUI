@@ -1,6 +1,7 @@
 from typing import Union
 from rich.text import Text
 import pandas as pd
+from stockstui.ui.widgets.navigable_data_table import NavigableDataTable
 
 def format_price_data_for_table(data: list[dict], old_prices: dict, alias_map: dict[str, str]) -> list[tuple]:
     """
@@ -74,9 +75,7 @@ def format_historical_data_as_table(data):
     Returns:
         A Textual DataTable widget ready for display.
     """
-    from textual.widgets import DataTable
-
-    table = DataTable(zebra_stripes=True, id="history-table")
+    table = NavigableDataTable(zebra_stripes=True, id="history-table")
 
     # Check if the data is intraday by seeing if all timestamps are at midnight.
     # If not, it's intraday data.

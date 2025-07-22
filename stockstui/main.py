@@ -23,11 +23,14 @@ from textual.reactive import reactive
 from textual.theme import Theme
 from textual.widgets import (Button, Checkbox, DataTable, Footer,
                              Input, Label, ListView, ListItem,
-                             Select, Static, Tab, Tabs, Markdown, Switch, RadioButton)
-# FIX: Directly import the CellDoesNotExist exception.
+                             Select, Static, Tab, Tabs, Markdown, Switch, RadioButton, ContentSwitcher)
+# FIX: Directly import the CellDoesNotExist exception and Coordinate class.
 from textual.widgets.data_table import CellDoesNotExist
+from textual.coordinate import Coordinate
 from textual.widget import Widget
+# FIX: Import get_current_worker from its correct module, textual.worker.
 from textual import on, work
+from textual.worker import get_current_worker
 from rich.text import Text
 from rich.style import Style
 from textual.color import Color
@@ -41,10 +44,14 @@ from stockstui.common import (PriceDataUpdated, NewsDataUpdated,
 from stockstui.data_providers.portfolio import PortfolioManager
 from stockstui.ui.widgets.search_box import SearchBox
 from stockstui.ui.widgets.tag_filter import TagFilterWidget, TagFilterChanged
-from stockstui.ui.views.config_view import ConfigView
+# Import the new container instead of the old view
+from stockstui.ui.views.config_view import ConfigContainer
+from stockstui.ui.views.config_views.general_config_view import GeneralConfigView
+from stockstui.ui.views.config_views.lists_config_view import ListsConfigView
 from stockstui.ui.views.history_view import HistoryView
 from stockstui.ui.views.news_view import NewsView
 from stockstui.ui.views.debug_view import DebugView
+from stockstui.ui.widgets.navigable_data_table import NavigableDataTable
 from stockstui.data_providers import market_provider
 from stockstui.presentation import formatter
 from stockstui.utils import extract_cell_text
@@ -137,7 +144,11 @@ class StocksTUI(App):
         Binding("v", "handle_sort_key('v')", "Sort by Volume", show=False),
         Binding("ctrl+c", "copy_text", "Copy", show=False),
         Binding("ctrl+C", "copy_text", "Copy", show=False),
-        Binding("escape,ctrl+[", "clear_sort_mode", "Dismiss or Focus Tabs", show=False, priority=True),
+        # FIX: Split the bindings. Escape is high-priority for dismissing things.
+        Binding("escape,ctrl+[", "back_or_dismiss", "Dismiss", show=False, priority=True),
+        # FIX: Backspace is non-priority, so it's only triggered if a widget
+        # (like an Input) doesn't handle it first.
+        Binding("backspace", "back_or_dismiss", "Back", show=False),
         Binding("k,up", "move_cursor('up')", "Up", show=False),
         Binding("j,down", "move_cursor('down')", "Down", show=False),
         Binding("h,left", "move_cursor('left')", "Left", show=False),
@@ -221,7 +232,8 @@ class StocksTUI(App):
             yield Tabs(id="tabs-container")
             with Container(id="app-grid"):
                 yield Container(id="output-container")
-                yield ConfigView(id="config-container")
+                # Use the new ConfigContainer instead of the old ConfigView
+                yield ConfigContainer(id="config-container")
             with Horizontal(id="status-bar-container"):
                 yield Label("Market Status: Unknown", id="market-status")
                 yield Label("Last Refresh: Never", id="last-refresh-time")
@@ -242,12 +254,13 @@ class StocksTUI(App):
         self._update_theme_variables(active_theme)
         
         # Populate the config view with current settings.
-        config_view = self.query_one(ConfigView)
-        config_view.query_one("#theme-select", Select).set_options([(t, t) for t in self._available_theme_names])
-        config_view.query_one("#theme-select", Select).value = active_theme
-        config_view.query_one("#auto-refresh-switch", Switch).value = self.config.get_setting("auto_refresh", False)
-        config_view.query_one("#refresh-interval-input", Input).value = str(self.config.get_setting("refresh_interval", 300.0))
-        config_view.query_one("#market-calendar-select", Select).value = self.config.get_setting("market_calendar", "NYSE")
+        config_container = self.query_one(ConfigContainer)
+        general_view = config_container.query_one(GeneralConfigView)
+        general_view.query_one("#theme-select", Select).set_options([(t, t) for t in self._available_theme_names])
+        general_view.query_one("#theme-select", Select).value = active_theme
+        general_view.query_one("#auto-refresh-switch", Switch).value = self.config.get_setting("auto_refresh", False)
+        general_view.query_one("#refresh-interval-input", Input).value = str(self.config.get_setting("refresh_interval", 300.0))
+        general_view.query_one("#market-calendar-select", Select).value = self.config.get_setting("market_calendar", "NYSE")
 
         # --- Determine Start Category and Tickers from CLI Overrides ---
         start_category = None
@@ -489,9 +502,10 @@ class StocksTUI(App):
         if tabs_widget.tab_count >= idx_to_activate:
             tabs_widget.active = f"tab-{idx_to_activate}"
         
-        # Repopulate the selects and checkboxes in the ConfigView.
-        config_view = self.query_one(ConfigView)
-        default_tab_select = config_view.query_one("#default-tab-select", Select)
+        # Repopulate the selects and checkboxes in the ConfigContainer.
+        config_container = self.query_one(ConfigContainer)
+        general_view = config_container.query_one(GeneralConfigView)
+        default_tab_select = general_view.query_one("#default-tab-select", Select)
         options = [(t['name'], t['category']) for t in self.tab_map if t['category'] not in ['configs', 'history', 'news', 'debug']]
         default_tab_select.set_options(options)
         
@@ -506,7 +520,7 @@ class StocksTUI(App):
         else:
             default_tab_select.clear()
         
-        vis_container = config_view.query_one("#visible-tabs-container")
+        vis_container = general_view.query_one("#visible-tabs-container")
         await vis_container.remove_children()
         all_cats_for_toggle = ["all"] + list(self.config.lists.keys()) + ["history", "news", "debug"]
         hidden = set(self.config.get_setting("hidden_tabs", []))
@@ -517,7 +531,8 @@ class StocksTUI(App):
             checkbox = Checkbox(cat.replace("_", " ").capitalize(), cat not in hidden, name=cat)
             await vis_container.mount(checkbox)
             
-        self._populate_symbol_list_view()
+        # The ListsConfigView is now responsible for populating its own list.
+        self.query_one(ListsConfigView).repopulate_lists()
 
     def get_active_category(self) -> str | None:
         """Returns the category string (e.g., 'stocks', 'crypto') of the currently active tab."""
@@ -603,33 +618,6 @@ class StocksTUI(App):
             interval,
             lambda: self.fetch_market_status(calendar)
         )
-
-    def _populate_symbol_list_view(self):
-        """Populates the list of symbol categories in the Config view."""
-        try:
-            config_view = self.query_one(ConfigView)
-            view = config_view.query_one("#symbol-list-view", ListView)
-            current_idx = view.index
-            view.clear()
-            
-            # Exclude session lists from the config panel. Use a robust check for None.
-            session_lists = self.cli_overrides.get('session_list') or {}
-            categories = [c for c in self.config.lists.keys() if c not in session_lists]
-
-            if not categories:
-                self.active_list_category = None
-                return
-            for category in categories:
-                view.append(ListItem(Label(category.replace("_", " ").capitalize()), name=category))
-            if current_idx is not None and len(view.children) > current_idx:
-                view.index = current_idx
-            elif view.children and self.active_list_category is None:
-                view.index = 0
-                self.active_list_category = view.children[0].name
-            
-            config_view._update_list_highlight()
-        except NoMatches:
-            pass
     
     def action_refresh(self, force: bool = False):
         """
@@ -639,7 +627,8 @@ class StocksTUI(App):
         category = self.get_active_category()
         if category and category not in ["history", "news", "debug", "configs"]:
             if category == 'all':
-                symbols = list(s['ticker'] for lst in self.config.lists.values() for s in lst)
+                seen = set()
+                symbols = [s['ticker'] for lst in self.config.lists.values() for s in lst if s['ticker'] not in seen and not seen.add(s['ticker'])]
             else:
                 symbols = [s['ticker'] for s in self.config.lists.get(category, [])]
             
@@ -729,7 +718,8 @@ class StocksTUI(App):
         elif category == 'news':
             target_id = '#news-ticker-input'
         elif category == 'configs':
-            target_id = '#symbol-list-view'
+            # In the new config layout, the container itself is the primary target
+            target_id = '#config-container'
         elif category == 'debug':
             target_id = '#debug-table'
         elif category and category not in ['history', 'news', 'configs', 'debug']: # Price views
@@ -784,6 +774,8 @@ class StocksTUI(App):
         output_container.display = not is_config_tab
         self.query_one("#status-bar-container").display = not is_config_tab
         if is_config_tab:
+            # If switching to the config tab, ensure the main hub is shown.
+            config_container.show_main()
             return
 
         if category == 'history':
@@ -801,19 +793,21 @@ class StocksTUI(App):
                 tag_filter.display = False # Initially hidden
                 await output_container.mount(tag_filter)
 
-            await output_container.mount(DataTable(id="price-table", zebra_stripes=True))
+            await output_container.mount(NavigableDataTable(id="price-table", zebra_stripes=True))
 
-            price_table = self.query_one("#price-table", DataTable)
+            price_table = self.query_one("#price-table", NavigableDataTable)
             price_table.add_column("Description", key="Description")
             price_table.add_column("Price", key="Price")
             price_table.add_column("Change", key="Change")
             price_table.add_column("% Change", key="% Change")
             price_table.add_column("Day's Range", key="Day's Range")
             price_table.add_column("52-Wk Range", key="52-Wk Range")
-            price_table.add_column("Ticker", key="Ticker")            
-
+            price_table.add_column("Ticker", key="Ticker")
+            
             if category == 'all':
-                symbols = list(s['ticker'] for lst in self.config.lists.values() for s in lst)
+                # Preserve config order for 'all' view
+                seen = set()
+                symbols = [s['ticker'] for lst in self.config.lists.values() for s in lst if s['ticker'] not in seen and not seen.add(s['ticker'])]
             else:
                 symbols = [s['ticker'] for s in self.config.lists.get(category, [])]
             
@@ -825,7 +819,10 @@ class StocksTUI(App):
                 self.fetch_prices(symbols, force=False, category=category)
             elif symbols:
                 # We have symbols, try to get cached data
-                cached_data = [price for s in symbols if (price := market_provider.get_cached_price(s))]
+                # Re-order cached data to match the desired symbol order
+                data_map = {item['symbol']: item for s in symbols if (item := market_provider.get_cached_price(s))}
+                cached_data = [data_map[s] for s in symbols if s in data_map]
+                
                 if cached_data:
                     alias_map = self._get_alias_map()
                     # Populate comparison data before initial display
@@ -846,7 +843,8 @@ class StocksTUI(App):
         """Worker to fetch market price data in the background."""
         try:
             data = market_provider.get_market_price_data(symbols, force_refresh=force)
-            self.post_message(PriceDataUpdated(data, category))
+            if not get_current_worker().is_cancelled:
+                self.post_message(PriceDataUpdated(data, category))
         except Exception as e:
             logging.error(f"Worker fetch_prices failed for category '{category}': {e}")
 
@@ -855,7 +853,8 @@ class StocksTUI(App):
         """Worker to fetch the current market status."""
         try:
             status = market_provider.get_market_status(calendar)
-            self.post_message(MarketStatusUpdated(status))
+            if not get_current_worker().is_cancelled:
+                self.post_message(MarketStatusUpdated(status))
         except Exception as e:
             logging.error(f"Market status worker failed: {e}")
 
@@ -863,24 +862,27 @@ class StocksTUI(App):
     def fetch_news(self, tickers_str: str):
         """Worker to fetch news data for one or more tickers."""
         try:
-            # Parse the comma-separated string into a list of tickers
             tickers = [t.strip().upper() for t in tickers_str.split(',') if t.strip()]
             if not tickers:
-                self.post_message(NewsDataUpdated(tickers_str, []))
+                if not get_current_worker().is_cancelled:
+                    self.post_message(NewsDataUpdated(tickers_str, []))
                 return
 
             data = market_provider.get_news_for_tickers(tickers)
-            self.post_message(NewsDataUpdated(tickers_str, data))
+            if not get_current_worker().is_cancelled:
+                self.post_message(NewsDataUpdated(tickers_str, data))
         except Exception as e:
             logging.error(f"Worker fetch_news failed for {tickers_str}: {e}")
-            self.post_message(NewsDataUpdated(tickers_str, None))
+            if not get_current_worker().is_cancelled:
+                self.post_message(NewsDataUpdated(tickers_str, None))
             
     @work(exclusive=True, thread=True)
     def fetch_historical_data(self, ticker: str, period: str, interval: str = "1d"):
         """Worker to fetch historical price data for a specific ticker."""
         try:
             data = market_provider.get_historical_data(ticker, period, interval)
-            self.post_message(HistoricalDataUpdated(data))
+            if not get_current_worker().is_cancelled:
+                self.post_message(HistoricalDataUpdated(data))
         except Exception as e:
             logging.error(f"Worker fetch_historical_data failed for {ticker} over {period} with interval {interval}: {e}")
 
@@ -888,7 +890,8 @@ class StocksTUI(App):
     def run_info_comparison_test(self, ticker: str):
         """Worker to fetch fast vs slow ticker info for the debug tab."""
         data = market_provider.get_ticker_info_comparison(ticker)
-        self.post_message(TickerInfoComparisonUpdated(fast_info=data['fast'], slow_info=data['slow']))
+        if not get_current_worker().is_cancelled:
+            self.post_message(TickerInfoComparisonUpdated(fast_info=data['fast'], slow_info=data['slow']))
 
     @work(exclusive=True, thread=True)
     def run_ticker_debug_test(self, symbols: list[str]):
@@ -896,7 +899,8 @@ class StocksTUI(App):
         start_time = time.perf_counter()
         data = market_provider.run_ticker_debug_test(symbols)
         total_time = time.perf_counter() - start_time
-        self.post_message(TickerDebugDataUpdated(data, total_time))
+        if not get_current_worker().is_cancelled:
+            self.post_message(TickerDebugDataUpdated(data, total_time))
         
     @work(exclusive=True, thread=True)
     def run_list_debug_test(self, lists: dict[str, list[str]]):
@@ -904,7 +908,8 @@ class StocksTUI(App):
         start_time = time.perf_counter()
         data = market_provider.run_list_debug_test(lists)
         total_time = time.perf_counter() - start_time
-        self.post_message(ListDebugDataUpdated(data, total_time))
+        if not get_current_worker().is_cancelled:
+            self.post_message(ListDebugDataUpdated(data, total_time))
 
     @work(exclusive=True, thread=True)
     def run_cache_test(self, lists: dict[str, list[str]]):
@@ -912,7 +917,8 @@ class StocksTUI(App):
         start_time = time.perf_counter()
         data = market_provider.run_cache_test(lists)
         total_time = time.perf_counter() - start_time
-        self.post_message(CacheTestDataUpdated(data, total_time))
+        if not get_current_worker().is_cancelled:
+            self.post_message(CacheTestDataUpdated(data, total_time))
 
     def _style_and_populate_price_table(self, price_table: DataTable, rows: list[tuple]):
         """
@@ -984,8 +990,10 @@ class StocksTUI(App):
             self._pre_refresh_cursor_key = None
             if not self._is_filter_refresh and dt.row_count > 0 and dt.cursor_row >= 0:
                 try:
-                    self._pre_refresh_cursor_key = dt.get_row_key(dt.cursor_row)
-                except KeyError:
+                    # Use the correct public API to get the row key from the cursor index.
+                    coordinate = Coordinate(row=dt.cursor_row, column=0)
+                    self._pre_refresh_cursor_key = dt.coordinate_to_cell_key(coordinate).row_key
+                except CellDoesNotExist:
                     self._pre_refresh_cursor_key = None
             # --- END: Cursor Preservation Logic ---
 
@@ -997,7 +1005,8 @@ class StocksTUI(App):
             if active_category == 'all':
                 # For 'all', we iterate through lists in config order to build the base symbol list.
                 # Duplicates are implicitly handled by _filter_symbols_by_tags.
-                symbols_on_screen = [s['ticker'] for lst in self.config.lists.values() for s in lst]
+                seen = set()
+                symbols_on_screen = [s['ticker'] for lst in self.config.lists.values() for s in lst if s['ticker'] not in seen and not seen.add(s['ticker'])]
             else:
                 symbols_on_screen = [s['ticker'] for s in self.config.lists.get(active_category, [])]
 
@@ -1327,20 +1336,23 @@ class StocksTUI(App):
         self._sort_reverse = False
         await self._display_data_for_category(self.get_active_category())
 
-    def action_clear_sort_mode(self) -> None:
+    def action_back_or_dismiss(self) -> None:
         """
-        Clears sort mode or dismisses the search box.
-        This action is bound to 'escape'.
+        Handles 'back' and 'dismiss' actions in a context-sensitive way.
+        This action is bound to 'escape' and 'backspace'.
         """
+        # Priority 1: Clear sort mode if active.
         if self._sort_mode:
             self._sort_mode = False
             try:
                 status_label = self.query_one("#last-refresh-time", Label)
                 if self._original_status_text is not None:
                     status_label.update(self._original_status_text)
-            except NoMatches: pass
+            except NoMatches:
+                pass
             return
 
+        # Priority 2: Dismiss the search box if it's active.
         try:
             search_box = self.query_one(SearchBox)
             if self._original_table_data:
@@ -1348,12 +1360,25 @@ class StocksTUI(App):
                 for row_key, row_data in self._original_table_data:
                     self.search_target_table.add_row(*row_data, key=row_key.value)
             search_box.remove()
-        except NoMatches: pass
-        else: return
+            return
+        except NoMatches:
+            pass
+        
+        # Priority 3: Handle back-navigation within the ConfigContainer.
+        if self.get_active_category() == "configs":
+            try:
+                config_container = self.query_one(ConfigContainer)
+                # The container's action returns True if it successfully navigated back.
+                if config_container.action_go_back():
+                    return  # If it navigated, our work is done.
+            except NoMatches:
+                pass
 
+        # Fallback: If no other context was handled, focus the main tabs.
         try:
             self.query_one(Tabs).focus()
-        except NoMatches: pass
+        except NoMatches:
+            pass
 
     def action_focus_input(self) -> None:
         """Focus the primary input widget of the current view using the new helper method."""
@@ -1367,7 +1392,7 @@ class StocksTUI(App):
         if key == 'u':
             if target_view == 'price':
                 await self._undo_sort()
-                self.action_clear_sort_mode()
+                self.action_back_or_dismiss()
             return
 
         column_map = {'d': {'price': 'Description', 'history': 'Date'}, 'p': {'price': 'Price'}, 'c': {'price': 'Change', 'history': 'Close'}, 'e': {'price': '% Change'}, 't': {'price': 'Ticker'}, 'o': {'history': 'Open'}, 'H': {'history': 'High'}, 'L': {'history': 'Low'}, 'v': {'history': 'Volume'},}
@@ -1379,7 +1404,7 @@ class StocksTUI(App):
         else:
             self._set_and_apply_sort(column_key_str, f"key '{key}'")
         
-        self.action_clear_sort_mode()
+        self.action_back_or_dismiss()
 
     def action_focus_search(self):
         """Activates the search box for the current table view."""
@@ -1391,7 +1416,12 @@ class StocksTUI(App):
         target_id = None
         if category and category not in ['history', 'news', 'configs', 'debug']: target_id = "#price-table"
         elif category == 'debug': target_id = "#debug-table"
-        elif category == 'configs': target_id = "#ticker-table"
+        elif category == 'configs':
+             # In the new config layout, the target table is in the lists view
+            try:
+                target_id = "#" + self.query_one(ListsConfigView).query_one(DataTable).id
+            except NoMatches:
+                target_id = None
         
         if not target_id:
             self.bell(); return
@@ -1434,11 +1464,58 @@ class StocksTUI(App):
         self.active_tag_filter = message.tags
         # Set the flag to true so the cursor resets on the upcoming refresh.
         self._is_filter_refresh = True
-        # Refresh the current view to apply the new filter
-        self.action_refresh()
+        # Refresh the current view to apply the new filter.
+        # This is now a UI-only operation.
+        self._redisplay_price_table()
         # Update filter status after refresh
         self._update_tag_filter_status()
     
+    def _redisplay_price_table(self):
+        """Re-draws the price table using only data from the in-memory cache.
+        
+        This method is used for UI-only updates like clearing filters, which should
+        be instantaneous and not trigger network requests.
+        """
+        try:
+            dt = self.query_one("#price-table", DataTable)
+            active_category = self.get_active_category()
+            if not active_category: return
+
+            dt.clear()
+
+            # 1. Get the correctly ordered list of symbols that should be on screen.
+            if active_category == 'all':
+                seen = set()
+                symbols_on_screen = [s['ticker'] for lst in self.config.lists.values() for s in lst if s['ticker'] not in seen and not seen.add(s['ticker'])]
+            else:
+                symbols_on_screen = [s['ticker'] for s in self.config.lists.get(active_category, [])]
+
+            ordered_filtered_symbols = self._filter_symbols_by_tags(active_category, symbols_on_screen)
+
+            # 2. Fetch data only from the in-memory cache.
+            data_for_table = [market_provider.get_cached_price(s) for s in ordered_filtered_symbols]
+            data_for_table = [item for item in data_for_table if item is not None]
+
+            # 3. Render the table.
+            if not data_for_table:
+                if ordered_filtered_symbols:
+                    dt.add_row("[dim]No cached data for symbols in this filter. Press 'r' to refresh.[/dim]")
+                else:
+                    dt.add_row("[dim]No symbols match the current tag filter.[/dim]")
+                return
+
+            alias_map = self._get_alias_map()
+            rows = formatter.format_price_data_for_table(data_for_table, self._price_comparison_data, alias_map)
+            
+            self._style_and_populate_price_table(dt, rows)
+            self._apply_price_table_sort()
+            
+            # Since this is a UI-only refresh, the "Last Refresh" time doesn't change.
+            # But we must reset the filter flag.
+            self._is_filter_refresh = False
+
+        except NoMatches:
+            pass
     #endregion
 
 def show_manual():
@@ -1492,31 +1569,36 @@ def run_cli_output(args: argparse.Namespace):
         console.print(f"[bold red]Error:[/] No lists found matching your criteria.")
         return
         
-    all_tickers = set()
+    # FIX: Use an ordered list and a set to preserve order while ensuring uniqueness.
+    ordered_tickers = []
+    seen_tickers = set()
     alias_map = {}
     for _, list_content in lists_to_iterate:
         for item in list_content:
             ticker = item.get("ticker")
-            if ticker:
-                all_tickers.add(ticker)
+            if ticker and ticker not in seen_tickers:
+                ordered_tickers.append(ticker)
+                seen_tickers.add(ticker)
                 alias_map[ticker] = item.get("alias", ticker)
 
-    if not all_tickers:
+    if not ordered_tickers:
         console.print("[yellow]No tickers found for the specified lists.[/yellow]")
         return
 
     # --- 3. Fetch Data using yfinance ---
     with console.status("[bold green]Fetching data...[/]"):
         try:
-            ticker_objects = yf.Tickers(" ".join(all_tickers))
-            all_info = {ticker: ticker_objects.tickers[ticker].info for ticker in all_tickers}
+            ticker_objects = yf.Tickers(" ".join(ordered_tickers))
+            all_info = {ticker: ticker_objects.tickers[ticker].info for ticker in ordered_tickers}
         except Exception as e:
             console.print(f"[bold red]Failed to fetch data from API:[/] {e}")
             return
 
     # --- 4. Format Data for Display ---
     rows = []
-    for ticker, info in all_info.items():
+    # FIX: Iterate over the ordered list of tickers to build the rows.
+    for ticker in ordered_tickers:
+        info = all_info.get(ticker)
         if not info or not info.get('currency'):
             rows.append(("Invalid Ticker", None, None, None, "N/A", "N/A", ticker))
             continue

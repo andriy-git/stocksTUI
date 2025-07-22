@@ -64,11 +64,18 @@ DataTable > Header {
   display: none; /* Hidden by default */
   layout: vertical;
   height: 1fr;
-  overflow-y: auto; /* Enables vertical scrolling */
-  scrollbar-color: $panel;
-  scrollbar-color-hover: $accent;
+  /* FIX: Scrolling is now handled by the child views, not the main container. */
   padding: 0 1; /* Padding on left and right */
 }
+
+/* FIX: New class to make all config child views scrollable. */
+.config-view-child {
+  height: 1fr;
+  overflow-y: auto;
+  scrollbar-color: $panel;
+  scrollbar-color-hover: $accent;
+}
+
 
 /* Top config section with general settings and tab visibility */
 #top-config-container {
@@ -434,4 +441,9 @@ Footer {
   padding: 1;
   color: $text;
   background: $surface;
+}
+
+.config-hub-button {
+    width: 50%;
+    height: 5;
 }

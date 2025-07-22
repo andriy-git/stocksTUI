@@ -1,8 +1,10 @@
 from textual.containers import Vertical, Horizontal, Container
-from textual.widgets import Button, DataTable, Static
+from textual.widgets import Button, Static
 from textual.app import ComposeResult, on
 
 from stockstui.ui.modals import CompareInfoModal
+# Import the new NavigableDataTable
+from stockstui.ui.widgets.navigable_data_table import NavigableDataTable
 
 class DebugView(Vertical):
     """A view for running various debug tests related to data fetching and caching."""
@@ -39,8 +41,8 @@ class DebugView(Vertical):
             async def on_modal_close(ticker: str | None):
                 if ticker:
                     # User submitted a ticker. The test will run.
-                    await container.mount(DataTable(id="debug-table"))
-                    dt = self.query_one("#debug-table", DataTable)
+                    await container.mount(NavigableDataTable(id="debug-table"))
+                    dt = self.query_one("#debug-table", NavigableDataTable)
                     
                     dt.clear()
                     dt.add_columns("Info Key", "Fast", "Slow")
@@ -57,8 +59,8 @@ class DebugView(Vertical):
             
         else:
             # For other tests, directly mount the DataTable and start the test
-            await container.mount(DataTable(id="debug-table"))
-            dt = self.query_one("#debug-table", DataTable)
+            await container.mount(NavigableDataTable(id="debug-table"))
+            dt = self.query_one("#debug-table", NavigableDataTable)
             
             dt.loading = True
             
