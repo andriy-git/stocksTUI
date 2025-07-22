@@ -8,26 +8,29 @@ A fast, minimalist terminal app for checking stock prices, crypto, news, and his
 
 ## ✨ Features
 
-* **Live-ish Price Data**
-  Watch your favorite tickers update in near real-time with configurable refresh intervals.
+*   **Live-ish Price Data**
+    Watch your favorite tickers update in near real-time with configurable refresh intervals.
 
-* **Watchlists That Make Sense**
-  Organize your assets into lists like "Tech", "Crypto", "Dividend Traps", or "Memes". Manage them entirely from the UI — no need to touch JSON unless you want to.
+*   **Watchlists That Make Sense**
+    Organize your assets into lists like "Tech", "Crypto", "Dividend Traps", or "Memes". Manage them entirely from the UI — no need to touch JSON unless you want to.
 
-* **Charts & Tables, Your Way**
-  View historical performance from `1D` to `Max`, switch between a detailed table or a candlestick chart. Zoom in, scroll, analyze.
+*   **Tag-Based Filtering**
+    Assign tags (e.g., `growth`, `ev`, `semiconductor`) to your tickers and instantly filter any watchlist to see only what's relevant.
 
-* **News That Matters**
-  See the latest headlines per ticker or a combined feed — no ads, no autoplay videos, just info.
+*   **Charts & Tables, Your Way**
+    View historical performance from `1D` to `Max`, from a table or a chart.
 
-* **Keyboard-Friendly, Mouse-Optional**
-  Navigate everything with Vim-style keys or arrow keys. Bonus: lots of helpful keybindings, fully documented.
+*   **News That Matters**
+    See the latest headlines per ticker or a combined feed — no ads, no autoplay videos, just info.
 
-* **Custom Themes & Settings**
-  Tweak the look and feel with built-in themes or your own. Set your default tab, hide unused ones, and make it feel like *your* dashboard.
+*   **Keyboard-Friendly, Mouse-Optional**
+    Navigate everything with Vim-style keys or arrow keys. Bonus: lots of helpful keybindings, fully documented.
 
-* **Smart Caching**
-  The app remembers what it can. Market-aware caching keeps startup fast and avoids pointless API calls on weekends or holidays.
+*   **Custom Themes & Settings**
+    Tweak the look and feel with built-in themes or your own. Set your default tab, hide unused ones, and make it feel like *your* dashboard.
+
+*   **Smart Caching**
+    The app remembers what it can. Market-aware caching keeps startup fast and avoids pointless API calls on weekends or holidays.
 
 > ⚠️ Note: All symbols follow [Yahoo Finance](https://finance.yahoo.com/) format — e.g., `AAPL` for Apple, `^GSPC` for S\&P 500, and `BTC-USD` for Bitcoin.
 
@@ -35,11 +38,11 @@ A fast, minimalist terminal app for checking stock prices, crypto, news, and his
 
 ## 🛠 Requirements
 
-* **Python** 3.9 or newer
-* **OS Support:**
+*   **Python** 3.9 or newer
+*   **OS Support:**
 
-  * **Linux / macOS** — Fully supported
-  * **Windows** — Use **Windows Terminal** or **WSL2**. It *won’t* work in the old `cmd.exe`.
+    *   **Linux / macOS** — Fully supported
+    *   **Windows** — Use **Windows Terminal** with **WSL2**. It *won’t* work in the old `cmd.exe`.
 
 ---
 
@@ -115,14 +118,14 @@ Create a temporary watchlist for this session only.
 stockstui --history TSLA --period 5d --chart
 ```
 
-Launch a 5-day candlestick chart for Tesla.
+Launch a 5-day chart for Tesla.
 
 ---
 
 ## ⌨️ Keybindings
 
-* Press `?` inside the app for a quick keybinding cheat sheet
-* Run `stockstui --man` for the full breakdown
+*   Press `?` inside the app for a quick keybinding cheat sheet
+*   Run `stockstui --man` for the full breakdown
 
 ---
 

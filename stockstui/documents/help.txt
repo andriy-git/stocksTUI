@@ -78,6 +78,7 @@ KEYBINDINGS
       q / Z         Quit the application.
       r             Refresh data for the currently visible tab.
       R (Shift+R)   Force a refresh for all symbols across all watchlists.
+      f             Toggle the tag filter view on a watchlist tab.
       1-9, 0        Switch directly to the corresponding tab.
 
     Navigation
@@ -87,12 +88,13 @@ KEYBINDINGS
       l / Right     Move cursor right.
       Tab           Focus the next widget.
       Shift+Tab     Focus the previous widget.
+      Esc           Dismiss menus/dialogs, or navigate back in the Configs tab.
+      Backspace     Navigate back in the Configs tab. Does not interfere with text input.
 
     Table Interaction
       i             Focus the primary input or table in the current view.
       /             Search the currently visible table (Price, Config, Debug).
       Ctrl+C        Copy the currently selected text to the system clipboard.
-      Esc           Exit sort mode, close the search box, or dismiss a dialog.
 
       Sort Mode (press 's' to enter sort mode when a table is focused):
         d           Sort by Description (Price View) / Date (History View).
@@ -111,6 +113,7 @@ CONFIGURATION
     (e.g., `~/.config/stockstui/` on Linux).
 
     - `lists.json`: Defines your watchlists.
+    - `portfolios.json`: Defines your portfolios and associated tickers.
     - `settings.json`: Controls application behavior like theme and auto-refresh.
     - `themes.json`: Contains color palettes for different themes.
 

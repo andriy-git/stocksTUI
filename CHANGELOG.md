@@ -1,17 +1,60 @@
 # Change Log
 
+## [0.1.0-b5] 2025-07-22
+
+### Added
+-   `feat(config)`: Implemented a multi-window layout for the "Configs" tab, separating General Settings, Watchlists, and Portfolios into distinct views.
+-   `feat(ux)`: The `backspace` key can now be used for hierarchical "back" navigation within the nested menus of the Configs tab.
+-   `feat(ux)`: Implemented a smart, self-adjusting refresh mechanism for the market status, polling more frequently around market open/close and less frequently during off-hours.
+-   `feat(ux)`: The tag filtering widget is now available on all ticker list tabs (e.g., 'crypto', 'indices').
+-   `feat(ux)`: The tag filter panel can now be toggled on and off using the `f` key, preserving filter state while hidden.
+
+### Changed
+-   `refactor(config)`: Refactored the entire configuration tab to use the Container View Pattern for better organization and scalability.
+-   `refactor(ux)`: Decoupled UI filtering from network refreshing, making tag filtering an instantaneous, local operation.
+
+### Fixed
+-   `fix(ux)`: The user-defined order of tickers is now correctly preserved during data refreshes, filtering, and in the command-line `--output` mode.
+-   `fix(ux)`: Cursor position in the main price table is now preserved across data refreshes and correctly resets only when filters are applied.
+-   `fix(core)`: Implemented worker cancellation checks to prevent `RuntimeError` crashes during application shutdown.
+
+### Docs
+-   `docs`: README and manual updated
+
+### Feature Merge: Portfolios & Tag Filtering
+This release includes a major contribution that introduces two powerful new systems for organizing and viewing assets: **Portfolios** and **Tags**. These features work together to provide a much more flexible and powerful way to manage watchlists.
+
+A special thanks to contributor **[@klahrich](https://github.com/klahrich)** for their incredible work on designing and implementing this entire feature set.
+
+#### Added
+-   **Full-featured Portfolio Management system:**
+  -   A new `portfolios.json` config file to define and persist portfolios.
+  -   A dedicated `PortfolioManager` to handle all backend logic (CRUD operations).
+  -   Automatic migration of existing `stocks` list into a "Default Portfolio" on first run for a seamless user transition.
+  -   New modals in the Config screen to create, rename, and delete portfolios.
+-   **Comprehensive Tagging and Filtering System:**
+  -   Ability to add multiple, space- or comma-separated tags to any ticker in the Config screen.
+  -   New `TagFilterWidget` appears at the top of price views, allowing users to filter the visible tickers by clicking one or more tag buttons.
+  -   A "Clear" button to quickly remove all active tag filters.
+  -   A status label that shows how many tickers are being shown out of the total available (e.g., "Showing 5 of 20").
+
+#### Changed
+-   The `Config` view has been significantly updated to support portfolio and tag management.
+-   The "Add/Edit Ticker" modals now include a field for "Tags".
+-   The `yfinance` dependency requirement was relaxed from `~=` to `>=` to allow for newer patch versions.
+
 ## [0.1.0-b4] 2025-07-15
 
 ### Added
-- `feat(cli)`: Added `-o/--output` flag to display stock data directly in the terminal without launching the TUI
-- `feat(cli)`: Supported optional watchlist filtering and session lists in CLI output mode
+-   `feat(cli)`: Added `-o/--output` flag to display stock data directly in the terminal without launching the TUI
+-   `feat(cli)`: Supported optional watchlist filtering and session lists in CLI output mode
 
 ### Fix
-- `fix(ui)`: Prevented crash on duplicate tickers in "all" tab by duplicating ticker lists
+-   `fix(ui)`: Prevented crash on duplicate tickers in "all" tab by duplicating ticker lists
 
 ### Docs
-- `docs(readme, cli)`: Updated help documentation to include `--output` flag and clarify TUI view options
-- `docs(changelog)`: Updated `CHANGELOG.md` to include recent feature additions
+-   `docs(readme, cli)`: Updated help documentation to include `--output` flag and clarify TUI view options
+-   `docs(changelog)`: Updated `CHANGELOG.md` to include recent feature additions
 
 ## [0.1.0-b3] 2025-07-14
 
