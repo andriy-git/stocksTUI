@@ -207,6 +207,7 @@ class StocksTUI(App):
         self._history_period = "1mo"
         self._sort_mode = False
         self._original_status_text = None
+        self._last_active_category: str | None = None
         # HACK: Flags to manage cursor restoration on refresh vs. filter changes.
         self._pre_refresh_cursor_key = None
         self._is_filter_refresh = False
@@ -1277,6 +1278,11 @@ class StocksTUI(App):
     @on(Tabs.TabActivated)
     async def on_tabs_tab_activated(self, event: Tabs.TabActivated):
         """Handles tab switching. Resets sort state and displays new content."""
+        new_category = self.get_active_category()
+        # FIX: Prevent full redraw if the tab is just being re-activated during a rebuild.
+        if new_category == self._last_active_category:
+            return
+
         try:
             self.query_one(SearchBox).remove()
             self._original_table_data = [] # Clear the backup data as well.
@@ -1286,18 +1292,19 @@ class StocksTUI(App):
         self._sort_column_key = None; self._sort_reverse = False
         self._history_sort_column_key = None; self._history_sort_reverse = False
         
-        active_category = self.get_active_category()
-        if active_category:
-            await self._display_data_for_category(active_category)
+        if new_category:
+            await self._display_data_for_category(new_category)
 
         self.action_refresh()
 
         try:
             status_label = self.query_one("#last-refresh-time")
-            if active_category in ['history', 'news', 'debug', 'configs']:
+            if new_category in ['history', 'news', 'debug', 'configs']:
                 status_label.update("")
         except NoMatches:
             pass
+
+        self._last_active_category = new_category
         
     @on(DataTable.RowSelected, "#price-table")
     def on_main_datatable_row_selected(self, event: DataTable.RowSelected):
