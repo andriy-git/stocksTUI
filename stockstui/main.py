@@ -310,9 +310,16 @@ class StocksTUI(App):
         self.action_refresh()
         # Start the price auto-refresh timer if configured
         self._manage_price_refresh_timer()
-        # Start the smart market status refresh loop
+
+        # FIX: Synchronously fetch the initial market status and then start the
+        # smart refresh loop. This ensures the status is correct on startup.
         calendar = self.config.get_setting("market_calendar", "NYSE")
-        self.fetch_market_status(calendar)
+        try:
+            # This is a fast, local call, so it's safe to do synchronously.
+            initial_status = market_provider.get_market_status(calendar)
+            self.post_message(MarketStatusUpdated(initial_status))
+        except Exception as e:
+            logging.error(f"Initial market status fetch failed: {e}")
 
     def _get_alias_map(self) -> dict[str, str]:
         """Creates a mapping from ticker symbol to its user-defined alias."""
