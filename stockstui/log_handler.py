@@ -38,12 +38,17 @@ class TextualHandler(logging.Handler):
             # FIX: Always use call_from_thread. This is the canonical way to
             # schedule a callback on the main event loop thread from any thread,
             # including the main one. It ensures thread-safety without complex checks.
-            self.app.call_from_thread(
-                self.app.notify,
-                message,
-                title=record.levelname.capitalize(),
-                severity=severity,
-                timeout=8
-            )
+            try:
+                self.app.call_from_thread(
+                    self.app.notify,
+                    message,
+                    title=record.levelname.capitalize(),
+                    severity=severity,
+                    timeout=8
+                )
+            except RuntimeError:
+                # This can happen if a worker thread tries to log a message
+                # after the app has already shut down. It's safe to ignore.
+                pass
         except Exception:
             self.handleError(record)
