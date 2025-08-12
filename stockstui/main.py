@@ -480,7 +480,7 @@ class StocksTUI(App):
                 self.tab_map.append({'name': category.replace("_", " ").capitalize(), 'category': category})
         self.tab_map.append({'name': "Configs", 'category': 'configs'})
 
-    async def _rebuild_app(self, new_active_category: str | None = None):
+    async def _rebuild_app(self, new_active_category: str | None = None, config_sub_view: str | None = None):
         """
         Rebuilds dynamic parts of the UI, primarily the tabs and config screen widgets.
         This is called on startup and after any change that affects tabs or lists.
@@ -510,6 +510,19 @@ class StocksTUI(App):
         
         if tabs_widget.tab_count >= idx_to_activate:
             tabs_widget.active = f"tab-{idx_to_activate}"
+
+        # If the active tab is 'configs', ensure the correct sub-view is shown.
+        if current_active_cat == 'configs' and config_sub_view:
+            config_container = self.query_one(ConfigContainer)
+            # Use a mapping to call the correct show method on the container
+            view_map = {
+                "lists": config_container.show_lists,
+                "general": config_container.show_general,
+                "portfolios": config_container.show_portfolios,
+            }
+            show_method = view_map.get(config_sub_view)
+            if show_method:
+                show_method()
         
         # Repopulate the selects and checkboxes in the ConfigContainer.
         config_container = self.query_one(ConfigContainer)
@@ -1367,8 +1380,15 @@ class StocksTUI(App):
     def action_back_or_dismiss(self) -> None:
         """
         Handles 'back' and 'dismiss' actions in a context-sensitive way.
-        This action is bound to 'escape' and 'backspace'.
+        This action is bound to 'escape'. Backspace is handled by widgets.
         """
+        # FIX: Check if the focused widget is an Input. If so, do not
+        # interfere with its default event handling. This allows backspace to work.
+        if isinstance(self.focused, Input):
+            # Allow 'escape' to de-focus, but let 'backspace' be handled by the Input
+            if self.app.last_key.key != "escape":
+                return
+
         # Priority 1: Clear sort mode if active.
         if self._sort_mode:
             self._sort_mode = False
