@@ -258,7 +258,7 @@ class ListsConfigView(Vertical):
             keys.insert(idx - 1, keys.pop(idx))
             self.app.config.lists = {k: self.app.config.lists[k] for k in keys}
             self.app.config.save_lists()
-            await self.app._rebuild_app('configs')
+            await self.app._rebuild_app('configs', config_sub_view='lists')
             self.query_one(ListView).index = idx - 1
 
     @on(Button.Pressed, "#move_list_down")
@@ -272,7 +272,7 @@ class ListsConfigView(Vertical):
             keys.insert(idx + 1, keys.pop(idx))
             self.app.config.lists = {k: self.app.config.lists[k] for k in keys}
             self.app.config.save_lists()
-            await self.app._rebuild_app('configs')
+            await self.app._rebuild_app('configs', config_sub_view='lists')
             self.query_one(ListView).index = idx + 1
 
     @on(Button.Pressed, "#move_ticker_up")

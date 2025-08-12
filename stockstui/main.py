@@ -207,6 +207,7 @@ class StocksTUI(App):
         self._history_period = "1mo"
         self._sort_mode = False
         self._original_status_text = None
+        self._last_active_category: str | None = None
         # HACK: Flags to manage cursor restoration on refresh vs. filter changes.
         self._pre_refresh_cursor_key = None
         self._is_filter_refresh = False
@@ -310,9 +311,17 @@ class StocksTUI(App):
         self.action_refresh()
         # Start the price auto-refresh timer if configured
         self._manage_price_refresh_timer()
-        # Start the smart market status refresh loop
+
+        # FIX: Synchronously fetch the initial market status and then start the
+        # smart refresh loop. This ensures the status is correct on startup.
         calendar = self.config.get_setting("market_calendar", "NYSE")
-        self.fetch_market_status(calendar)
+        try:
+            # This is a fast, local call, so it's safe to do synchronously.
+            initial_status = market_provider.get_market_status(calendar)
+            # Directly update the UI and schedule the next refresh.
+            self._update_market_status_display(initial_status)
+        except Exception as e:
+            logging.error(f"Initial market status fetch failed: {e}")
 
     def _get_alias_map(self) -> dict[str, str]:
         """Creates a mapping from ticker symbol to its user-defined alias."""
@@ -471,7 +480,7 @@ class StocksTUI(App):
                 self.tab_map.append({'name': category.replace("_", " ").capitalize(), 'category': category})
         self.tab_map.append({'name': "Configs", 'category': 'configs'})
 
-    async def _rebuild_app(self, new_active_category: str | None = None):
+    async def _rebuild_app(self, new_active_category: str | None = None, config_sub_view: str | None = None):
         """
         Rebuilds dynamic parts of the UI, primarily the tabs and config screen widgets.
         This is called on startup and after any change that affects tabs or lists.
@@ -501,6 +510,19 @@ class StocksTUI(App):
         
         if tabs_widget.tab_count >= idx_to_activate:
             tabs_widget.active = f"tab-{idx_to_activate}"
+
+        # If the active tab is 'configs', ensure the correct sub-view is shown.
+        if current_active_cat == 'configs' and config_sub_view:
+            config_container = self.query_one(ConfigContainer)
+            # Use a mapping to call the correct show method on the container
+            view_map = {
+                "lists": config_container.show_lists,
+                "general": config_container.show_general,
+                "portfolios": config_container.show_portfolios,
+            }
+            show_method = view_map.get(config_sub_view)
+            if show_method:
+                show_method()
         
         # Repopulate the selects and checkboxes in the ConfigContainer.
         config_container = self.query_one(ConfigContainer)
@@ -1059,17 +1081,24 @@ class StocksTUI(App):
 
         except NoMatches: pass
     
-    @on(MarketStatusUpdated)
-    async def on_market_status_updated(self, message: MarketStatusUpdated):
-        """Handles the arrival of new market status data and schedules the next poll."""
+    def _update_market_status_display(self, status_data: dict):
+        """
+        Formats and displays the market status. Also schedules the next refresh.
+        This is a central method called both on startup and on subsequent refreshes.
+        """
         try:
-            status_parts = formatter.format_market_status(message.status)
+            status_parts = formatter.format_market_status(status_data)
             if not status_parts:
                 self.query_one("#market-status").update(Text("Market: Unknown", style="dim"))
                 return
 
             calendar, status, holiday = status_parts
-            status_color_map = {"open": self.theme_variables.get("status-open", "green"), "pre": self.theme_variables.get("status-pre", "yellow"), "post": self.theme_variables.get("status-post", "yellow"), "closed": self.theme_variables.get("status-closed", "red")}
+            status_color_map = {
+                "open": self.theme_variables.get("status-open", "green"),
+                "pre": self.theme_variables.get("status-pre", "yellow"),
+                "post": self.theme_variables.get("status-post", "yellow"),
+                "closed": self.theme_variables.get("status-closed", "red")
+            }
             status_text_map = {"open": "Open", "pre": "Pre-Market", "post": "After Hours", "closed": "Closed"}
             status_color = status_color_map.get(status, "dim")
             status_display = status_text_map.get(status, "Unknown")
@@ -1081,9 +1110,15 @@ class StocksTUI(App):
             
             self.query_one("#market-status").update(text)
             
-            # This is the key part of the new feature: schedule the next check.
-            self._schedule_next_market_status_refresh(message.status)
-        except NoMatches: pass
+            # After updating, schedule the next smart refresh.
+            self._schedule_next_market_status_refresh(status_data)
+        except NoMatches:
+            pass
+
+    @on(MarketStatusUpdated)
+    async def on_market_status_updated(self, message: MarketStatusUpdated):
+        """Handles the arrival of new market status data from a background worker."""
+        self._update_market_status_display(message.status)
 
     @on(HistoricalDataUpdated)
     async def on_historical_data_updated(self, message: HistoricalDataUpdated):
@@ -1256,6 +1291,11 @@ class StocksTUI(App):
     @on(Tabs.TabActivated)
     async def on_tabs_tab_activated(self, event: Tabs.TabActivated):
         """Handles tab switching. Resets sort state and displays new content."""
+        new_category = self.get_active_category()
+        # FIX: Prevent full redraw if the tab is just being re-activated during a rebuild.
+        if new_category == self._last_active_category:
+            return
+
         try:
             self.query_one(SearchBox).remove()
             self._original_table_data = [] # Clear the backup data as well.
@@ -1265,18 +1305,19 @@ class StocksTUI(App):
         self._sort_column_key = None; self._sort_reverse = False
         self._history_sort_column_key = None; self._history_sort_reverse = False
         
-        active_category = self.get_active_category()
-        if active_category:
-            await self._display_data_for_category(active_category)
+        if new_category:
+            await self._display_data_for_category(new_category)
 
         self.action_refresh()
 
         try:
             status_label = self.query_one("#last-refresh-time")
-            if active_category in ['history', 'news', 'debug', 'configs']:
+            if new_category in ['history', 'news', 'debug', 'configs']:
                 status_label.update("")
         except NoMatches:
             pass
+
+        self._last_active_category = new_category
         
     @on(DataTable.RowSelected, "#price-table")
     def on_main_datatable_row_selected(self, event: DataTable.RowSelected):
@@ -1339,8 +1380,15 @@ class StocksTUI(App):
     def action_back_or_dismiss(self) -> None:
         """
         Handles 'back' and 'dismiss' actions in a context-sensitive way.
-        This action is bound to 'escape' and 'backspace'.
+        This action is bound to 'escape'. Backspace is handled by widgets.
         """
+        # FIX: Check if the focused widget is an Input. If so, do not
+        # interfere with its default event handling. This allows backspace to work.
+        if isinstance(self.focused, Input):
+            # Allow 'escape' to de-focus, but let 'backspace' be handled by the Input
+            if self.app.last_key.key != "escape":
+                return
+
         # Priority 1: Clear sort mode if active.
         if self._sort_mode:
             self._sort_mode = False
