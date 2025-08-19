@@ -1103,7 +1103,7 @@ class StocksTUI(App):
             status_color = status_color_map.get(status, "dim")
             status_display = status_text_map.get(status, "Unknown")
             
-            text = Text.assemble(f"{calendar}: ", (f"{status_display}", style=status_color))
+            text = Text.assemble(f"{calendar}: ", (f"{status_display}", status_color))
             if holiday and status == 'closed':
                 holiday_display = holiday[:20] + '...' if len(holiday) > 20 else holiday
                 text.append(f" ({holiday_display})", style=self.theme_variables.get("text-muted", "dim"))
