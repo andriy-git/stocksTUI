@@ -4,6 +4,7 @@ venv
 run.sh
 *notes.md
 *.swp
+*.diff
 
 # Packaging and distribution artifacts
 /dist/
