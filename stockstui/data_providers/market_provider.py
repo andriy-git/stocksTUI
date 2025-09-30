@@ -173,12 +173,11 @@ def get_market_status(calendar_name='NYSE') -> dict:
     if calendar_name == 'GDAX': calendar_name = 'CME_Crypto'
     cal = _get_calendar(calendar_name)
     if not cal:
-        return {'status': 'unknown', 'is_open': True, 'calendar': calendar_name, 'next_open': None, 'next_close': None, 'holiday': None}
+        return {'status': 'unknown', 'is_open': True, 'calendar': calendar_name}
 
     try:
         now = pd.Timestamp.now(tz=cal.tz)
-        # Get schedule for today and next 7 days to find transitions
-        schedule = cal.schedule(start_date=now.date(), end_date=now.date() + pd.Timedelta(days=7))
+        schedule = cal.schedule(start_date=now.date() - pd.Timedelta(days=1), end_date=now.date() + pd.Timedelta(days=7))
 
         result = {
             'status': 'closed',
@@ -186,10 +185,14 @@ def get_market_status(calendar_name='NYSE') -> dict:
             'calendar': calendar_name,
             'next_open': None,
             'next_close': None,
+            'reason': None,
             'holiday': None,
+            'premarket_open': None,
+            'premarket_close': None,
+            'postmarket_open': None,
+            'postmarket_close': None,
         }
 
-        # Find next open and close from the schedule
         if not schedule.empty:
             future_opens = schedule.market_open[schedule.market_open > now]
             if not future_opens.empty:
@@ -199,26 +202,37 @@ def get_market_status(calendar_name='NYSE') -> dict:
             if not future_closes.empty:
                 result['next_close'] = future_closes.iloc[0].to_pydatetime()
 
-        # Determine current status based on today's schedule
         today_schedule = schedule[schedule.index.date == now.date()]
         if not today_schedule.empty:
-            market_open = today_schedule.iloc[0].market_open
-            market_close = today_schedule.iloc[0].market_close
+            row = today_schedule.iloc[0]
+            market_open, market_close = row.market_open, row.market_close
+            
+            result['premarket_open'] = row.get('premarket_open')
+            result['premarket_close'] = row.get('premarket_close')
+            result['postmarket_open'] = row.get('postmarket_open')
+            result['postmarket_close'] = row.get('postmarket_close')
+
             if market_open <= now < market_close:
                 result['status'] = 'open'
                 result['is_open'] = True
+            elif result['premarket_open'] and result['premarket_close'] and result['premarket_open'] <= now < result['premarket_close']:
+                result['status'] = 'pre'
+            elif result['postmarket_open'] and result['postmarket_close'] and result['postmarket_open'] <= now < result['postmarket_close']:
+                result['status'] = 'post'
         else:
-            # If no schedule today, it's a weekend or holiday
-            holidays_obj = cal.holidays()
-            # The Series is indexed by datetime; check if today's date is in the index.
-            today_date = pd.Timestamp(now.date())
-            if today_date in holidays_obj.holidays.index:
-                result['holiday'] = holidays_obj.holidays.loc[today_date]
+            if now.weekday() >= 5:
+                result['reason'] = 'weekend'
+            else:
+                holidays_obj = cal.holidays()
+                today_date = pd.Timestamp(now.date())
+                if today_date in holidays_obj.holidays.index:
+                    result['reason'] = 'holiday'
+                    result['holiday'] = holidays_obj.holidays.loc[today_date]
 
         return result
     except Exception as e:
         logging.error(f"Error getting market status for {calendar_name}: {e}")
-        return {'status': 'unknown', 'is_open': True, 'calendar': calendar_name, 'next_open': None, 'next_close': None, 'holiday': None}
+        return {'status': 'unknown', 'is_open': True, 'calendar': calendar_name}
 
 def get_historical_data(ticker: str, period: str, interval: str = "1d"):
     df = pd.DataFrame()

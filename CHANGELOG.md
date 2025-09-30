@@ -3,6 +3,7 @@
 ## [0.1.0-b5] 2025-07-22
 
 ### Added
+-   `feat(ux)`: Add detailed real-time market status display with local timezone support, closure reasons, and next open/close times.
 -   `feat(config)`: Implemented a multi-window layout for the "Configs" tab, separating General Settings, Watchlists, and Portfolios into distinct views.
 -   `feat(ux)`: The `backspace` key can now be used for hierarchical "back" navigation within the nested menus of the Configs tab.
 -   `feat(ux)`: Implemented a smart, self-adjusting refresh mechanism for the market status, polling more frequently around market open/close and less frequently during off-hours.

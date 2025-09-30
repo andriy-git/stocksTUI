@@ -230,13 +230,60 @@ def format_news_for_display(news: list[dict]) -> tuple[Union[str, Text], list[st
         
     return (text, urls)
 
+from datetime import datetime
+from dateutil.tz import gettz
+
 def format_market_status(market_status: dict | None) -> tuple | None:
-    """Extracts and returns the core components from the market status dictionary."""
+    """Formats the detailed market status dictionary into a user-friendly string."""
     if not isinstance(market_status, dict):
         return None
 
     calendar = market_status.get('calendar', 'Market')
     status = market_status.get('status', 'closed')
+    reason = market_status.get('reason')
     holiday = market_status.get('holiday')
+    next_open = market_status.get('next_open')
+    next_close = market_status.get('next_close')
+    
+    # Default to system's local timezone if gettz() returns None
+    local_tz = gettz() or datetime.now().astimezone().tzinfo
 
-    return (calendar, status, holiday)
+    text = f"{calendar}: "
+    status_color = "dim"
+    status_map = {
+        "open": ("Open", "status-open"),
+        "pre": ("Pre-Market", "status-pre"),
+        "post": ("After Hours", "status-post"),
+        "closed": ("Closed", "status-closed"),
+        "unknown": ("Unknown", "text-muted"),
+    }
+    
+    status_display, status_color_var = status_map.get(status, ("Unknown", "text-muted"))
+    
+    if status == 'open' and next_close:
+        close_local = next_close.astimezone(local_tz)
+        time_str = f"({close_local:%H:%M})"
+        text_parts = [(f"{status_display} ", status_color_var), (time_str, "text-muted")]
+    elif status in ('pre', 'post') and next_close:
+        close_local = next_close.astimezone(local_tz)
+        time_str = f"(ends {close_local:%H:%M})"
+        text_parts = [(f"{status_display} ", status_color_var), (time_str, "text-muted")]
+    elif status == 'closed' and next_open:
+        open_local = next_open.astimezone(local_tz)
+        time_str = f"({open_local:%a %H:%M})"
+        reason_str = ""
+        if reason == 'weekend':
+            reason_str = " (Weekend)"
+        elif reason == 'holiday' and holiday:
+            holiday_str = holiday[:15] + '...' if len(holiday) > 15 else holiday
+            reason_str = f" (Holiday: {holiday_str})"
+        
+        text_parts = [
+            (f"{status_display}", status_color_var),
+            (f"{reason_str} ", "text-muted"),
+            (time_str, "text-muted")
+        ]
+    else:
+        text_parts = [(status_display, status_color_var)]
+
+    return (text, text_parts)
