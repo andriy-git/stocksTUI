@@ -205,6 +205,8 @@ class StocksTUI(App):
         self._sort_mode = False
         self._original_status_text = None
         self._last_active_category: str | None = None
+        self._last_config_sub_view: str | None = None
+        self._force_config_sub_view: str | None = None  # Used to temporarily force a config view after operations
         self._pre_refresh_cursor_key = None
         self._is_filter_refresh = False
 
@@ -573,6 +575,20 @@ class StocksTUI(App):
             show_method = view_map.get(config_sub_view)
             if show_method:
                 show_method()
+            # Temporarily force this config sub-view after the operation
+            self._force_config_sub_view = config_sub_view
+        elif current_active_cat == 'configs':
+            # If we're going to configs but no sub-view was specified, try to restore the last one
+            config_container = self.query_one(ConfigContainer)
+            if self._last_config_sub_view:
+                view_map = {
+                    "lists": config_container.show_lists,
+                    "general": config_container.show_general,
+                    "portfolios": config_container.show_portfolios,
+                }
+                show_method = view_map.get(self._last_config_sub_view)
+                if show_method:
+                    show_method()
         
         config_container = self.query_one(ConfigContainer)
         general_view = config_container.query_one(GeneralConfigView)
@@ -818,7 +834,33 @@ class StocksTUI(App):
         output_container.display = not is_config_tab
         self.query_one("#status-bar-container").display = not is_config_tab
         if is_config_tab:
-            config_container.show_main()
+            # Check if we need to force a specific config view (e.g., after an operation)
+            # This is used temporarily to maintain context after operations like adding/deleting lists
+            if self._force_config_sub_view:
+                # Use the forced config view and then clear the flag so it doesn't persist
+                view_map = {
+                    "lists": config_container.show_lists,
+                    "general": config_container.show_general,
+                    "portfolios": config_container.show_portfolios,
+                }
+                show_method = view_map.get(self._force_config_sub_view)
+                if show_method:
+                    show_method()
+                # Clear the force flag so it doesn't affect subsequent navigation
+                self._force_config_sub_view = None
+            else:
+                # Otherwise, check the current view in the container to preserve user navigation
+                current_config_view = config_container.query_one("ContentSwitcher").current
+                if current_config_view == "main":
+                    config_container.show_main()
+                elif current_config_view == "general":
+                    config_container.show_general()
+                elif current_config_view == "lists":
+                    config_container.show_lists()
+                elif current_config_view == "portfolios":
+                    config_container.show_portfolios()
+                else:
+                    config_container.show_main()
             return
 
         if category == 'history':
@@ -1291,6 +1333,17 @@ class StocksTUI(App):
                 status_label.update("")
         except NoMatches:
             pass
+
+        # If we're leaving the configs tab, maintain the sub-view so we return to the same view
+        # Only clear the config sub-view when going to completely different UI modes
+        if new_category not in ['history', 'news', 'debug'] and self._last_active_category == 'configs':
+            # We're leaving configs, but not going to a special mode like history/news/debug
+            # Keep the last config sub-view so we return to it if we come back to configs
+            pass
+        elif new_category in ['history', 'news', 'debug']:
+            # We're going to a different type of view, so clear the config sub-view
+            # This ensures that if we later go back to configs, we start from main
+            self._last_config_sub_view = None
 
         self._last_active_category = new_category
         

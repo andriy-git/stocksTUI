@@ -36,7 +36,6 @@ class ListsConfigView(Vertical):
         """Populates the list of symbol categories from the app's config."""
         try:
             view = self.query_one("#symbol-list-view", ListView)
-            current_idx = view.index
             view.clear()
             
             session_lists = self.app.cli_overrides.get('session_list') or {}
@@ -44,15 +43,36 @@ class ListsConfigView(Vertical):
 
             if not categories:
                 self.app.active_list_category = None
+                self._populate_ticker_table()
                 return
+
             for category in categories:
                 view.append(ListItem(Label(category.replace("_", " ").capitalize()), name=category))
-            if current_idx is not None and len(view.children) > current_idx:
-                view.index = current_idx
-            elif view.children and self.app.active_list_category is None:
-                view.index = 0
-                self.app.active_list_category = view.children[0].name
+
+            # FIX: Explicitly set the index after populating. The community confirmed
+            # that ListView does not automatically select an index.
+            new_index = None
+            if self.app.active_list_category:
+                try:
+                    # Find the index of the currently active category
+                    new_index = next(
+                        i for i, item in enumerate(view.children) if isinstance(item, ListItem) and item.name == self.app.active_list_category
+                    )
+                except StopIteration:
+                    new_index = None
             
+            # If no index is set (either because active_list_category was None or not found), default to 0.
+            if new_index is None and view.children:
+                new_index = 0
+
+            if new_index is not None:
+                view.index = new_index
+                # Ensure the app's active category state is synced with the view's new index.
+                if view.children and isinstance(view.children[new_index], ListItem):
+                    self.app.active_list_category = view.children[new_index].name
+            else:
+                self.app.active_list_category = None
+
             self._update_list_highlight()
             self._populate_ticker_table()
         except NoMatches:
@@ -104,7 +124,7 @@ class ListsConfigView(Vertical):
             if new_name and new_name not in self.app.config.lists:
                 self.app.config.lists[new_name] = []
                 self.app.config.save_lists()
-                await self.app._rebuild_app('configs')
+                await self.app._rebuild_app('configs', config_sub_view='lists')
                 self.app.notify(f"List '{new_name}' added.")
         self.app.push_screen(AddListModal(), on_close)
 
@@ -161,7 +181,7 @@ class ListsConfigView(Vertical):
             del self.app.config.lists[category]
             self.app.active_list_category = None
             self.app.config.save_lists()
-            await self.app._rebuild_app('configs')
+            await self.app._rebuild_app('configs', config_sub_view='lists')
             self.app.notify(f"List '{category}' deleted.")
 
     @on(Button.Pressed, "#rename_list")
@@ -194,7 +214,7 @@ class ListsConfigView(Vertical):
                     self.app.config.save_settings()
 
                 self.app.config.save_lists()
-                await self.app._rebuild_app('configs')
+                await self.app._rebuild_app('configs', config_sub_view='lists')
                 self.app.notify(f"List '{category}' renamed to '{new_name}'.")
         self.app.push_screen(EditListModal(category), on_close)
 
@@ -258,7 +278,7 @@ class ListsConfigView(Vertical):
             keys.insert(idx - 1, keys.pop(idx))
             self.app.config.lists = {k: self.app.config.lists[k] for k in keys}
             self.app.config.save_lists()
-            await self.app._rebuild_app('configs')
+            await self.app._rebuild_app('configs', config_sub_view='lists')
             self.query_one(ListView).index = idx - 1
 
     @on(Button.Pressed, "#move_list_down")
@@ -272,7 +292,7 @@ class ListsConfigView(Vertical):
             keys.insert(idx + 1, keys.pop(idx))
             self.app.config.lists = {k: self.app.config.lists[k] for k in keys}
             self.app.config.save_lists()
-            await self.app._rebuild_app('configs')
+            await self.app._rebuild_app('configs', config_sub_view='lists')
             self.query_one(ListView).index = idx + 1
 
     @on(Button.Pressed, "#move_ticker_up")

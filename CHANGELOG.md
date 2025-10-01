@@ -2,6 +2,7 @@
 ## [Unreleased]
 
 ### Added
+-   `feat(ux)`: Persist last active view within the Configs screen.
 -   `feat(ux)`: Add detailed real-time market status display with local timezone support, closure reasons, and next open/close times.
 
 ### Fixed
