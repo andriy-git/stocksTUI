@@ -7,6 +7,10 @@
 
 ### Fixed
 -   `fix(core)`: Prevent crash on shutdown by handling logging race condition.
+-   `fix(cache)`: Correct cache expiry logic to prevent using stale `previous_close` values.
+
+### Test
+-   `test(cache)`: Add unit test to verify cache invalidation across market sessions.
 
 ## [0.1.0-b5] 2025-07-22
 
