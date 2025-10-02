@@ -10,6 +10,9 @@
 -   `fix(cache)`: Correct cache expiry logic to prevent using stale `previous_close` values.
 
 ### Test
+-   `test(suite)`: Added a comprehensive test suite covering the application's core logic, data providers, database, and UI components.
+-   `test(ci)`: Implemented a GitHub Actions CI workflow to run tests, linting, and type checking automatically.
+-   `test(runner)`: Added a `run_tests.sh` script for convenient local test execution with coverage reporting.
 -   `test(cache)`: Add unit test to verify cache invalidation across market sessions.
 
 ## [0.1.0-b5] 2025-07-22
