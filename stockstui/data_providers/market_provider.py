@@ -36,15 +36,16 @@ def _get_calendar(exchange_name: str):
 def _calculate_info_expiry(exchange_name: str) -> datetime:
     now = datetime.now(timezone.utc)
     cal = _get_calendar(exchange_name)
-    if cal is None: return now + timedelta(hours=24)
+    if cal is None: return now + timedelta(hours=1)
     try:
         schedule = cal.schedule(start_date=now.date(), end_date=now.date() + timedelta(days=7))
         if not schedule.empty:
-            for next_close in schedule.market_close:
-                if next_close > now:
-                    return next_close + timedelta(minutes=5)
+            future_opens = schedule.market_open[schedule.market_open > now]
+            if not future_opens.empty:
+                # Expire 5 minutes after the next open to ensure we get the new previous_close value
+                return future_opens.iloc[0].to_pydatetime() + timedelta(minutes=5)
     except Exception: pass
-    return now + timedelta(hours=24)
+    return now + timedelta(hours=1)
 
 def populate_price_cache(initial_data: dict):
     global _price_cache; _price_cache.update(initial_data)
