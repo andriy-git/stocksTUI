@@ -1,5 +1,5 @@
 # Change Log
-## [Unreleased]
+## [0.1.0-b6] 2025-11-09
 
 ### Added
 -   `feat(ux)`: Persist last active view within the Configs screen.
