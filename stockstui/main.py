@@ -397,12 +397,14 @@ class StocksTUI(App):
     def _get_alias_map(self) -> dict[str, str]:
         """Creates a mapping from ticker symbol to its user-defined alias."""
         alias_map = {}
-        for list_data in self.config.lists.values():
-            for item in list_data:
-                ticker = item.get('ticker')
-                alias = item.get('alias')
-                if ticker and alias:
-                    alias_map[ticker] = alias
+        hidden_tabs = set(self.config.get_setting("hidden_tabs", []))
+        for list_name, list_data in self.config.lists.items():
+            if list_name not in hidden_tabs:
+                for item in list_data:
+                    ticker = item.get('ticker')
+                    alias = item.get('alias')
+                    if ticker and alias:
+                        alias_map[ticker] = alias
         return alias_map
 
     def _get_available_tags_for_category(self, category: str) -> list[str]:
@@ -413,9 +415,16 @@ class StocksTUI(App):
         
         lists_to_check = []
         if category == 'all':
-            lists_to_check.extend(self.config.lists.values())
+            # Only include non-hidden lists when showing 'all' category
+            hidden_tabs = set(self.config.get_setting("hidden_tabs", []))
+            for list_name, list_data in self.config.lists.items():
+                if list_name not in hidden_tabs:
+                    lists_to_check.append(list_data)
         elif category in self.config.lists:
-            lists_to_check.append(self.config.lists[category])
+            # If this specific category is hidden, don't include tags from it
+            hidden_tabs = set(self.config.get_setting("hidden_tabs", []))
+            if category not in hidden_tabs:
+                lists_to_check.append(self.config.lists[category])
 
         for list_data in lists_to_check:
             for item in list_data:
@@ -440,9 +449,16 @@ class StocksTUI(App):
         
         lists_to_check = []
         if category == 'all':
-            lists_to_check.extend(self.config.lists.values())
+            # Only include non-hidden lists when showing 'all' category
+            hidden_tabs = set(self.config.get_setting("hidden_tabs", []))
+            for list_name, list_data in self.config.lists.items():
+                if list_name not in hidden_tabs:
+                    lists_to_check.append(list_data)
         elif category in self.config.lists:
-            lists_to_check.append(self.config.lists.get(category, []))
+            # If this specific category is hidden, don't include it in filtering
+            hidden_tabs = set(self.config.get_setting("hidden_tabs", []))
+            if category not in hidden_tabs:
+                lists_to_check.append(self.config.lists.get(category, []))
 
         for list_data in lists_to_check:
             for item in list_data:
@@ -466,9 +482,16 @@ class StocksTUI(App):
             
             if category and category not in ["history", "news", "debug", "configs"]:
                 if category == 'all':
-                    total_symbols = list(set(s['ticker'] for lst in self.config.lists.values() for s in lst))
+                    hidden_tabs = set(self.config.get_setting("hidden_tabs", []))
+                    total_symbols = list(set(s['ticker'] for list_name, lst in self.config.lists.items() for s in lst if list_name not in hidden_tabs))
                 else:
-                    total_symbols = [s['ticker'] for s in self.config.lists.get(category, [])]
+                    # Check if this specific category is hidden
+                    hidden_tabs = set(self.config.get_setting("hidden_tabs", []))
+                    if category not in hidden_tabs:
+                        total_symbols = [s['ticker'] for s in self.config.lists.get(category, [])]
+                    else:
+                        # If category is hidden, no symbols should be available
+                        total_symbols = []
                 
                 filtered_symbols = self._filter_symbols_by_tags(category, total_symbols)
                 
@@ -707,7 +730,8 @@ class StocksTUI(App):
         if category and category not in ["history", "news", "debug", "configs"]:
             if category == 'all':
                 seen = set()
-                symbols = [s['ticker'] for lst in self.config.lists.values() for s in lst if s['ticker'] not in seen and not seen.add(s['ticker'])]
+                hidden_tabs = set(self.config.get_setting("hidden_tabs", []))
+                symbols = [s['ticker'] for list_name, lst in self.config.lists.items() for s in lst if list_name not in hidden_tabs and s['ticker'] not in seen and not seen.add(s['ticker'])]
             else:
                 symbols = [s['ticker'] for s in self.config.lists.get(category, [])]
             
@@ -889,7 +913,8 @@ class StocksTUI(App):
             
             if category == 'all':
                 seen = set()
-                symbols = [s['ticker'] for lst in self.config.lists.values() for s in lst if s['ticker'] not in seen and not seen.add(s['ticker'])]
+                hidden_tabs = set(self.config.get_setting("hidden_tabs", []))
+                symbols = [s['ticker'] for list_name, lst in self.config.lists.items() for s in lst if list_name not in hidden_tabs and s['ticker'] not in seen and not seen.add(s['ticker'])]
             else:
                 symbols = [s['ticker'] for s in self.config.lists.get(category, [])]
             
@@ -1070,7 +1095,8 @@ class StocksTUI(App):
             
             if active_category == 'all':
                 seen = set()
-                symbols_on_screen = [s['ticker'] for lst in self.config.lists.values() for s in lst if s['ticker'] not in seen and not seen.add(s['ticker'])]
+                hidden_tabs = set(self.config.get_setting("hidden_tabs", []))
+                symbols_on_screen = [s['ticker'] for list_name, lst in self.config.lists.items() for s in lst if list_name not in hidden_tabs and s['ticker'] not in seen and not seen.add(s['ticker'])]
             else:
                 symbols_on_screen = [s['ticker'] for s in self.config.lists.get(active_category, [])]
 
@@ -1506,7 +1532,8 @@ class StocksTUI(App):
 
             if active_category == 'all':
                 seen = set()
-                symbols_on_screen = [s['ticker'] for lst in self.config.lists.values() for s in lst if s['ticker'] not in seen and not seen.add(s['ticker'])]
+                hidden_tabs = set(self.config.get_setting("hidden_tabs", []))
+                symbols_on_screen = [s['ticker'] for list_name, lst in self.config.lists.items() for s in lst if list_name not in hidden_tabs and s['ticker'] not in seen and not seen.add(s['ticker'])]
             else:
                 symbols_on_screen = [s['ticker'] for s in self.config.lists.get(active_category, [])]
 

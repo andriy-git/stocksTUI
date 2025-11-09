@@ -8,6 +8,7 @@
 ### Fixed
 -   `fix(core)`: Prevent crash on shutdown by handling logging race condition.
 -   `fix(cache)`: Correct cache expiry logic to prevent using stale `previous_close` values.
+-   `fix(ux)`: Hidden tabs are now properly excluded from symbol listings, tag filtering, and alias mapping throughout the application.
 
 ### Test
 -   `test(suite)`: Added a comprehensive test suite covering the application's core logic, data providers, database, and UI components.
