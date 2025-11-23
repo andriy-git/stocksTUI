@@ -38,6 +38,30 @@ class ConfigManager:
         self.db_path = self.user_cache_dir / "app_cache.db"
 
         self.settings: dict = self._load_or_create('settings.json')
+        
+        # Merge defaults for new keys to ensure backward compatibility
+        try:
+            default_settings_path = self.default_dir / 'settings.json'
+            if default_settings_path.exists():
+                with open(default_settings_path, 'r') as f:
+                    default_settings = json.load(f)
+                    updated = False
+                    for k, v in default_settings.items():
+                        if k not in self.settings:
+                            self.settings[k] = v
+                            updated = True
+                        elif k == "column_settings" and isinstance(v, list) and isinstance(self.settings[k], list):
+                            # Special handling for column_settings to merge new columns
+                            existing_keys = {col.get("key") for col in self.settings[k] if isinstance(col, dict)}
+                            for default_col in v:
+                                if isinstance(default_col, dict) and default_col.get("key") not in existing_keys:
+                                    self.settings[k].append(default_col)
+                                    updated = True
+                    if updated:
+                        self.save_settings()
+        except Exception as e:
+            logging.error(f"Failed to merge default settings: {e}")
+
         self.lists: dict = self._load_or_create('lists.json')
         self.themes: dict = self._load_or_create('themes.json')
         self.portfolios: dict = self._load_or_create('portfolios.json')
