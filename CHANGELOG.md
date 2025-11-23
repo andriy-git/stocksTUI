@@ -1,4 +1,25 @@
 # Change Log
+## [0.1.0-b7] 2025-11-23
+
+### Added
+-   `feat(data)`: Added new financial metrics to data providers including volume, open price, PE ratio, market cap, dividend yield, EPS, and beta
+-   `feat(ui)`: Implemented dynamic column management system allowing users to show/hide specific data columns in price tables
+-   `feat(ui)`: Added column visibility toggles and reordering functionality in the Lists config view
+-   `feat(ui)`: Enhanced general config view with improved layout and tab visibility management using ListView
+-   `feat(core)`: Added automatic merging of new default settings for backward compatibility when config is updated
+-   `feat(ui)`: Implemented cursor position preservation across columns during data refreshes in price tables
+-   `feat(ui)`: Enabled sorting on all available columns, not just a predefined set
+
+### Changed
+-   `refactor(data)`: Modified data formatting to use dictionary-based rows instead of tuples for more flexible column management
+-   `refactor(ui)`: Updated styling for config views to use horizontal layouts with consistent labeling
+-   `refactor(core)`: Improved data fetching to include additional metrics like volume, PE ratio, market cap, and dividend yield
+-   `refactor(ui)`: Changed tab visibility management to use Switch widgets in a ListView instead of checkboxes
+
+### Fixed
+-   `fix(ui)`: Correctly preserve both row and column cursor position during data refresh operations
+-   `fix(ui)`: Fixed tab refresh logic to use proper repopulation methods instead of manual DOM manipulation
+
 ## [0.1.0-b6] 2025-11-09
 
 ### Added
