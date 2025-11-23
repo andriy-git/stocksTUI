@@ -22,17 +22,15 @@ class TestFormatter(unittest.TestCase):
         self.assertEqual(len(result), 1)
         row = result[0]
         
-        # Unpack the tuple for assertions
-        desc, price, change, pct, day_r, wk_r, sym, direction = row
-        
-        self.assertEqual(desc, 'My Apple Stock') # Alias should be used
-        self.assertEqual(price, 155.25)
-        self.assertAlmostEqual(change, 5.25)
-        self.assertAlmostEqual(pct, 5.25 / 150.0)
-        self.assertEqual(day_r, '$154.00 - $156.00')
-        self.assertEqual(wk_r, '$120.00 - $180.00')
-        self.assertEqual(sym, 'AAPL')
-        self.assertEqual(direction, 'up') # Price increased vs old_prices
+        # Assert on dictionary keys
+        self.assertEqual(row['Description'], 'My Apple Stock') # Alias should be used
+        self.assertEqual(row['Price'], 155.25)
+        self.assertAlmostEqual(row['Change'], 5.25)
+        self.assertAlmostEqual(row['% Change'], 5.25 / 150.0)
+        self.assertEqual(row["Day's Range"], '$154.00 - $156.00')
+        self.assertEqual(row["52-Wk Range"], '$120.00 - $180.00')
+        self.assertEqual(row['Ticker'], 'AAPL')
+        self.assertEqual(row['_change_direction'], 'up') # Price increased vs old_prices
 
     def test_format_price_data_direction_down(self):
         """Test that change direction is 'down' when price decreases."""
@@ -40,7 +38,7 @@ class TestFormatter(unittest.TestCase):
         old_prices = {'TSLA': 801.0}
         
         row = formatter.format_price_data_for_table(sample_data, old_prices, {})[0]
-        self.assertEqual(row[-1], 'down') # Last element is direction
+        self.assertEqual(row['_change_direction'], 'down')
 
     def test_format_price_data_direction_none(self):
         """Test that change direction is None when price is unchanged or old price is missing."""
@@ -48,12 +46,12 @@ class TestFormatter(unittest.TestCase):
         
         # No old price
         row_no_old = formatter.format_price_data_for_table(sample_data, {}, {})[0]
-        self.assertIsNone(row_no_old[-1])
+        self.assertIsNone(row_no_old['_change_direction'])
 
         # Same old price
         old_prices_same = {'GOOG': 2800.0}
         row_same = formatter.format_price_data_for_table(sample_data, old_prices_same, {})[0]
-        self.assertIsNone(row_same[-1])
+        self.assertIsNone(row_same['_change_direction'])
 
     def test_format_news_for_display(self):
         """Test formatting of news data into a markdown string."""
