@@ -208,6 +208,7 @@ class StocksTUI(App):
         self._last_config_sub_view: str | None = None
         self._force_config_sub_view: str | None = None  # Used to temporarily force a config view after operations
         self._pre_refresh_cursor_key = None
+        self._pre_refresh_cursor_column = None
         self._is_filter_refresh = False
 
         # --- Handle CLI Overrides ---
@@ -630,15 +631,8 @@ class StocksTUI(App):
         else:
             default_tab_select.clear()
         
-        vis_container = general_view.query_one("#visible-tabs-container")
-        await vis_container.remove_children()
-        all_cats_for_toggle = ["all"] + list(self.config.lists.keys()) + ["history", "news", "debug"]
-        hidden = set(self.config.get_setting("hidden_tabs", []))
-        for cat in all_cats_for_toggle:
-            if self.cli_overrides.get('session_list') and cat in self.cli_overrides['session_list']:
-                continue
-            checkbox = Checkbox(cat.replace("_", " ").capitalize(), cat not in hidden, name=cat)
-            await vis_container.mount(checkbox)
+        # Refresh visible tabs list
+        general_view.repopulate_visible_tabs()
             
         self.query_one(ListsConfigView).repopulate_lists()
 
@@ -903,13 +897,24 @@ class StocksTUI(App):
             await output_container.mount(NavigableDataTable(id="price-table", zebra_stripes=True))
 
             price_table = self.query_one("#price-table", NavigableDataTable)
-            price_table.add_column("Description", key="Description")
-            price_table.add_column("Price", key="Price")
-            price_table.add_column("Change", key="Change")
-            price_table.add_column("% Change", key="% Change")
-            price_table.add_column("Day's Range", key="Day's Range")
-            price_table.add_column("52-Wk Range", key="52-Wk Range")
-            price_table.add_column("Ticker", key="Ticker")
+            
+            column_settings = self.config.get_setting("column_settings", [])
+            # Fallback defaults if empty
+            if not column_settings:
+                column_settings = [
+                    {"key": "Ticker", "visible": True},
+                    {"key": "Description", "visible": True},
+                    {"key": "Price", "visible": True},
+                    {"key": "Change", "visible": True},
+                    {"key": "% Change", "visible": True},
+                    {"key": "Day's Range", "visible": True},
+                    {"key": "52-Wk Range", "visible": True},
+                ]
+
+            for col in column_settings:
+                if not isinstance(col, dict): continue
+                if col.get('visible', True):
+                    price_table.add_column(col['key'], key=col['key'])
             
             if category == 'all':
                 seen = set()
@@ -1021,7 +1026,7 @@ class StocksTUI(App):
         if not get_current_worker().is_cancelled:
             self.post_message(CacheTestDataUpdated(data, total_time))
 
-    def _style_and_populate_price_table(self, price_table: DataTable, rows: list[tuple]):
+    def _style_and_populate_price_table(self, price_table: DataTable, rows: list[dict]):
         """
         Applies dynamic styling and populates the main price table.
         """
@@ -1030,40 +1035,65 @@ class StocksTUI(App):
         error_color = self.theme_variables.get("error", "red")
         muted_color = self.theme_variables.get("text-muted", "dim")
 
+        column_settings = self.config.get_setting("column_settings", [])
+        if not column_settings:
+             column_settings = [
+                {"key": "Ticker", "visible": True},
+                {"key": "Description", "visible": True},
+                {"key": "Price", "visible": True},
+                {"key": "Change", "visible": True},
+                {"key": "% Change", "visible": True},
+                {"key": "Day's Range", "visible": True},
+                {"key": "52-Wk Range", "visible": True},
+            ]
+        
+        visible_columns = [c['key'] for c in column_settings if isinstance(c, dict) and c.get('visible', True)]
+
         for row_data in rows:
-            desc, price, change, change_percent, day_range, week_range, symbol, change_direction = row_data
+            row_values = []
+            symbol = row_data.get("Ticker")
+            change_direction = row_data.get("_change_direction")
             
-            if desc == 'Invalid Ticker': desc_text = Text(desc, style=error_color)
-            elif desc == 'N/A': desc_text = Text(desc, style=muted_color)
-            else: desc_text = Text(desc)
-            
-            price_text = Text(f"${price:,.2f}", style=price_color, justify="right") if price is not None else Text("N/A", style=muted_color, justify="right")
-            
-            if change is not None and change_percent is not None:
-                if change > 0:
-                    change_text = Text(f"{change:,.2f}", style=success_color, justify="right")
-                    change_percent_text = Text(f"+{change_percent:.2%}", style=success_color, justify="right")
-                elif change < 0:
-                    change_text = Text(f"{change:,.2f}", style=error_color, justify="right")
-                    change_percent_text = Text(f"{change_percent:.2%}", style=error_color, justify="right")
+            for col_key in visible_columns:
+                val = row_data.get(col_key)
+                
+                if col_key == "Description":
+                    if val == 'Invalid Ticker': text = Text(str(val), style=error_color)
+                    elif val == 'N/A': text = Text(str(val), style=muted_color)
+                    else: text = Text(str(val))
+                elif col_key == "Price":
+                    raw_price = val
+                    text = Text(f"${raw_price:,.2f}", style=price_color, justify="right") if raw_price is not None else Text("N/A", style=muted_color, justify="right")
+                elif col_key == "Change":
+                    raw_change = val
+                    if raw_change is not None:
+                        style = success_color if raw_change > 0 else (error_color if raw_change < 0 else "")
+                        text = Text(f"{raw_change:,.2f}", style=style, justify="right")
+                    else:
+                        text = Text("N/A", style=muted_color, justify="right")
+                elif col_key == "% Change":
+                    raw_pct = val
+                    if raw_pct is not None:
+                        style = success_color if raw_pct > 0 else (error_color if raw_pct < 0 else "")
+                        text = Text(f"{raw_pct:.2%}", style=style, justify="right")
+                    else:
+                        text = Text("N/A", style=muted_color, justify="right")
+                elif col_key in ["Volume", "Open", "Prev Close", "Day's Range", "52-Wk Range"]:
+                    text = Text(str(val), style=muted_color if val == "N/A" else "", justify="right")
+                elif col_key == "Ticker":
+                    text = Text(str(val), style=muted_color)
                 else:
-                    change_text = Text("0.00", justify="right")
-                    change_percent_text = Text("0.00%", justify="right")
-            else:
-                change_text = Text("N/A", style=muted_color, justify="right")
-                change_percent_text = Text("N/A", style=muted_color, justify="right")
+                    text = Text(str(val))
+                
+                row_values.append(text)
             
-            day_range_text = Text(day_range, style=muted_color if day_range == "N/A" else "", justify="right")
-            week_range_text = Text(week_range, style=muted_color if week_range == "N/A" else "", justify="right")
-            ticker_text = Text(symbol, style=muted_color)
-            price_table.add_row(desc_text, price_text, change_text, change_percent_text, day_range_text, week_range_text, ticker_text, key=symbol)
+            price_table.add_row(*row_values, key=symbol)
             
-            if change_direction == 'up':
-                self.flash_cell(symbol, "Change", "positive")
-                self.flash_cell(symbol, "% Change", "positive")
-            elif change_direction == 'down':
-                self.flash_cell(symbol, "Change", "negative")
-                self.flash_cell(symbol, "% Change", "negative")
+            if change_direction:
+                if "Change" in visible_columns:
+                    self.flash_cell(symbol, "Change", "positive" if change_direction == 'up' else "negative")
+                if "% Change" in visible_columns:
+                    self.flash_cell(symbol, "% Change", "positive" if change_direction == 'up' else "negative")
 
     @on(PriceDataUpdated)
     async def on_price_data_updated(self, message: PriceDataUpdated):
@@ -1083,12 +1113,15 @@ class StocksTUI(App):
             dt = self.query_one("#price-table", DataTable)
             
             self._pre_refresh_cursor_key = None
+            self._pre_refresh_cursor_column = None
             if not self._is_filter_refresh and dt.row_count > 0 and dt.cursor_row >= 0:
                 try:
                     coordinate = Coordinate(row=dt.cursor_row, column=0)
                     self._pre_refresh_cursor_key = dt.coordinate_to_cell_key(coordinate).row_key
+                    self._pre_refresh_cursor_column = dt.cursor_column
                 except CellDoesNotExist:
                     self._pre_refresh_cursor_key = None
+                    self._pre_refresh_cursor_column = None
 
             dt.loading = False
             dt.clear()
@@ -1132,7 +1165,10 @@ class StocksTUI(App):
             if self._pre_refresh_cursor_key:
                 try:
                     new_row_index = dt.get_row_index(self._pre_refresh_cursor_key)
-                    dt.move_cursor(row=new_row_index)
+                    if self._pre_refresh_cursor_column is not None:
+                        dt.move_cursor(row=new_row_index, column=self._pre_refresh_cursor_column)
+                    else:
+                        dt.move_cursor(row=new_row_index)
                 except KeyError:
                     pass
             
@@ -1389,14 +1425,16 @@ class StocksTUI(App):
 
     def _set_and_apply_sort(self, column_key_str: str, source: str) -> None:
         """Sets the sort key and direction for the price table and applies it."""
-        sortable_columns = {"Description", "Price", "Change", "% Change", "Ticker"}
-        if column_key_str not in sortable_columns: return
-
+        # We allow sorting on any column that is clicked
+        
         if self._sort_column_key == column_key_str:
             self._sort_reverse = not self._sort_reverse
         else:
             self._sort_column_key = column_key_str
-            self._sort_reverse = column_key_str not in ("Description", "Ticker")
+            # Default to descending for numeric columns
+            numeric_columns = {"Price", "Change", "% Change", "Volume", "Open", "Prev Close"}
+            self._sort_reverse = column_key_str in numeric_columns
+            
         self._apply_price_table_sort()
         
     def _set_and_apply_history_sort(self, column_key_str: str, source: str) -> None:
