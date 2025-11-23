@@ -1,6 +1,6 @@
 from textual.containers import Vertical, Horizontal
 from textual.widgets import (Button, Checkbox, Input, Label,
-                             Select, Switch)
+                             Select, Switch, ListView, ListItem)
 from textual.app import ComposeResult, on
 from textual.validation import Number
 
@@ -15,12 +15,12 @@ class GeneralConfigView(Vertical):
             # Left side for general application settings
             with Vertical(id="general-settings-container"):
                 yield Label("General Settings", classes="config-header")
-                with Vertical(classes="config-option-stacked"):
-                    yield Label("Default Tab:"); yield Select([], id="default-tab-select", allow_blank=True)
-                with Vertical(classes="config-option-stacked"):
-                    yield Label("Theme:"); yield Select([], id="theme-select", allow_blank=True)
-                with Vertical(classes="config-option-stacked"):
-                    yield Label("Market Status Calendar:")
+                with Horizontal(classes="config-option-horizontal"):
+                    yield Label("Default Tab:", classes="config-label"); yield Select([], id="default-tab-select", allow_blank=True)
+                with Horizontal(classes="config-option-horizontal"):
+                    yield Label("Theme:", classes="config-label"); yield Select([], id="theme-select", allow_blank=True)
+                with Horizontal(classes="config-option-horizontal"):
+                    yield Label("Market Status\nCalendar:", classes="config-label")
                     yield Select([
                         ("NYSE (US)", "NYSE"), ("TSX (Toronto)", "TSX"), ("BMF (Brazil)", "BMF"),
                         ("LSE (London)", "LSE"), ("EUREX (Europe)", "EUREX"), ("SIX (Swiss)", "SIX"), ("OSE (Oslo)", "OSE"),
@@ -29,15 +29,58 @@ class GeneralConfigView(Vertical):
                         ("CFE (CBOE Futures)", "CFE"), ("ICE Futures", "ICE"),
                         ("SIFMA US Bonds", "SIFMAUS"), ("SIFMA UK Bonds", "SIFMAUK"), ("SIFMA JP Bonds", "SIFMAJP"),
                     ], id="market-calendar-select")
-                with Vertical(classes="config-option-stacked"):
-                    yield Label("Auto Refresh:"); yield Switch(id="auto-refresh-switch")
-                with Vertical(classes="config-option-stacked"):
-                    yield Label("Refresh Interval (s):")
-                    with Horizontal():
-                        yield Input(id="refresh-interval-input", validators=[NotEmpty(), Number()]); yield Button("Update", id="update-refresh-interval")
+                with Horizontal(classes="config-option-horizontal"):
+                    yield Label("Auto Refresh:", classes="config-label"); yield Switch(id="auto-refresh-switch")
+                with Horizontal(classes="config-option-horizontal"):
+                    yield Label("Refresh\nInterval (s):", classes="config-label")
+                    yield Input(id="refresh-interval-input", validators=[NotEmpty(), Number()]); yield Button("Update", id="update-refresh-interval")
             # Right side for managing which tabs are visible
             with Vertical(id="visibility-settings-container"):
-                yield Label("Visible Tabs", classes="config-header"); yield Vertical(id="visible-tabs-container")
+                yield Label("Visible Tabs", classes="config-header")
+                yield ListView(id="visible-tabs-list-view")
+
+    def on_mount(self) -> None:
+        """Called when the view is mounted."""
+        self.repopulate_visible_tabs()
+
+    def repopulate_visible_tabs(self):
+        """Populates the visible tabs list view."""
+        view = self.query_one("#visible-tabs-list-view", ListView)
+        view.clear()
+        
+        hidden_tabs = self.app.config.get_setting("hidden_tabs", [])
+        
+        # Combine static tabs with dynamic lists from config
+        # Static tabs: All, History, News
+        # Dynamic lists: Stocks, Currencies, etc. (keys in self.app.config.lists)
+        
+        # Start with "All"
+        all_tabs = ["all"]
+        
+        # Add dynamic lists
+        if hasattr(self.app.config, 'lists'):
+            all_tabs.extend(list(self.app.config.lists.keys()))
+            
+        # Add other static tabs
+        all_tabs.extend(["history", "news", "debug"])
+        
+        # Remove duplicates and preserve order (though dict keys are ordered in recent Python)
+        seen = set()
+        unique_tabs = []
+        for t in all_tabs:
+            if t not in seen:
+                unique_tabs.append(t)
+                seen.add(t)
+        
+        for tab in unique_tabs:
+            visible = tab not in hidden_tabs
+            item_content = Horizontal(
+                Label(tab.replace("_", " ").capitalize(), classes="column-label"),
+                Switch(value=visible, classes="tab-switch"),
+                classes="column-item-layout"
+            )
+            item = ListItem(item_content, name=tab)
+            view.append(item)
 
     @on(Button.Pressed, "#update-refresh-interval")
     def on_update_refresh_button_pressed(self):
@@ -81,15 +124,32 @@ class GeneralConfigView(Vertical):
             self.app.fetch_market_status(str(event.value))
         self.app.config.save_settings()
 
-    @on(Checkbox.Changed)
-    async def on_tab_visibility_toggled(self, event: Checkbox.Changed):
-        """Handles changes to tab visibility checkboxes."""
+    @on(Switch.Changed)
+    async def on_tab_visibility_toggled(self, event: Switch.Changed):
+        """Handles changes to tab visibility switches."""
+        if "tab-switch" not in event.switch.classes:
+            return
+
+        key = None
+        for ancestor in event.switch.ancestors:
+            if isinstance(ancestor, ListItem):
+                key = ancestor.name
+                break
+        
+        if not key: return
+
         hidden_tabs = self.app.config.get_setting("hidden_tabs", [])
-        category = event.checkbox.name
         if event.value:
-            if category in hidden_tabs: hidden_tabs.remove(category)
+            if key in hidden_tabs: hidden_tabs.remove(key)
         else:
-            if category not in hidden_tabs: hidden_tabs.append(category)
+            if key not in hidden_tabs: hidden_tabs.append(key)
+            
         self.app.config.settings['hidden_tabs'] = hidden_tabs
         self.app.config.save_settings()
         await self.app._rebuild_app('configs')
+
+    @on(ListView.Selected, "#visible-tabs-list-view")
+    def on_tab_selected(self, event: ListView.Selected):
+        """Toggle switch on selection."""
+        switch = event.item.query_one(Switch)
+        switch.value = not switch.value
