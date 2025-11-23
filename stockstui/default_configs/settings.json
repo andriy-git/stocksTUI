@@ -2,5 +2,67 @@
     "theme": "gruvbox_soft_dark",
     "default_tab_category": "stocks",
     "auto_refresh": false,
-    "refresh_interval": 300.0
+    "refresh_interval": 300.0,
+    "column_settings": [
+        {
+            "key": "Ticker",
+            "visible": true
+        },
+        {
+            "key": "Description",
+            "visible": true
+        },
+        {
+            "key": "Price",
+            "visible": true
+        },
+        {
+            "key": "Change",
+            "visible": true
+        },
+        {
+            "key": "% Change",
+            "visible": true
+        },
+        {
+            "key": "Day's Range",
+            "visible": true
+        },
+        {
+            "key": "52-Wk Range",
+            "visible": true
+        },
+        {
+            "key": "Volume",
+            "visible": false
+        },
+        {
+            "key": "Open",
+            "visible": false
+        },
+        {
+            "key": "Prev Close",
+            "visible": false
+        },
+        {
+            "key": "PE Ratio",
+            "visible": false
+        },
+        {
+            "key": "Market Cap",
+            "visible": false
+        },
+        {
+            "key": "Div Yield",
+            "visible": false
+        },
+        {
+            "key": "EPS",
+            "visible": false
+        },
+        {
+            "key": "Beta",
+            "visible": false
+        }
+    ]
 }
