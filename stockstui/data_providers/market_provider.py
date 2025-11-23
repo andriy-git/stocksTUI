@@ -119,8 +119,15 @@ def _fetch_and_cache_slow_data(tickers: list[str]):
                         "previous_close": slow_info.get('regularMarketPreviousClose') or slow_info.get('previousClose'),
                         "day_low": fast_info.get('dayLow') or slow_info.get('regularMarketDayLow'),
                         "day_high": fast_info.get('dayHigh') or slow_info.get('regularMarketDayHigh'),
+                        "volume": fast_info.get('lastVolume') or slow_info.get('volume'),
+                        "open": fast_info.get('open') or slow_info.get('open'),
                         "fifty_two_week_low": slow_info.get('fiftyTwoWeekLow'),
                         "fifty_two_week_high": slow_info.get('fiftyTwoWeekHigh'),
+                        "pe_ratio": slow_info.get('trailingPE') or slow_info.get('forwardPE'),
+                        "market_cap": fast_info.get('marketCap') or slow_info.get('marketCap'),
+                        "dividend_yield": slow_info.get('dividendYield') or slow_info.get('trailingAnnualDividendYield'),
+                        "eps": slow_info.get('trailingEps') or slow_info.get('forwardEps'),
+                        "beta": slow_info.get('beta') or slow_info.get('beta3Year'),
                     }
                 }
             else:
@@ -141,6 +148,9 @@ def _fetch_fast_data(tickers: list[str]) -> dict:
                     "price": fast_info.get('lastPrice'),
                     "day_low": fast_info.get('dayLow'),
                     "day_high": fast_info.get('dayHigh'),
+                    "volume": fast_info.get('lastVolume'),
+                    "open": fast_info.get('open'),
+                    "market_cap": fast_info.get('marketCap'),
                 }
         except Exception:
             logging.warning(f"Failed to fetch fast data for {ticker}")
