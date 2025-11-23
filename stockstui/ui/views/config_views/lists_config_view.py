@@ -1,6 +1,6 @@
 from textual.containers import Vertical, Horizontal
 from textual.widgets import (Button, DataTable, Input, Label,
-                             ListView, ListItem)
+                             ListView, ListItem, Switch)
 from textual.app import ComposeResult, on
 from textual.dom import NoMatches
 from rich.text import Text
@@ -26,11 +26,43 @@ class ListsConfigView(Vertical):
                 yield DataTable(id="ticker-table", zebra_stripes=True)
                 with Vertical(id="ticker-buttons-container"):
                     yield Button("Add Ticker", id="add_ticker"); yield Button("Edit Ticker", id="edit_ticker"); yield Button("Remove Ticker", id="delete_ticker", variant="error"); yield Button("Move Ticker Up", id="move_ticker_up"); yield Button("Move Ticker Down", id="move_ticker_down")
+        
+        yield Label("Columns", classes="config-header-small")
+        with Horizontal(id="columns-management-container"):
+            with Vertical(id="columns-list-container"):
+                # User requested fixed height of 3 (interpreted as 3 items visible or height: 3)
+                # Setting height via CSS or inline styles is better, but here we can use id for CSS.
+                # We'll assume CSS will handle the height or we can try to enforce it.
+                yield ListView(id="columns-list-view")
+                with Horizontal(id="column-buttons"):
+                    yield Button("Up", id="move_col_up", classes="small-button")
+                    yield Button("Down", id="move_col_down", classes="small-button")
 
     def on_mount(self) -> None:
         """Called when the view is mounted. Sets up initial static state."""
         self.query_one("#ticker-table", DataTable).add_columns("Ticker", "Alias", "Note", "Tags")
         self.repopulate_lists()
+        self.repopulate_columns()
+
+    def repopulate_columns(self):
+        view = self.query_one("#columns-list-view", ListView)
+        view.clear()
+        
+        columns = self.app.config.get_setting("column_settings", [])
+        
+        for col in columns:
+            if not isinstance(col, dict): continue
+            key = col['key']
+            visible = col['visible']
+            
+            item_content = Horizontal(
+                Label(key, classes="column-label"),
+                Switch(value=visible, classes="column-switch"),
+                classes="column-item-layout"
+            )
+            
+            item = ListItem(item_content, name=key)
+            view.append(item)
 
     def repopulate_lists(self):
         """Populates the list of symbol categories from the app's config."""
@@ -112,10 +144,15 @@ class ListsConfigView(Vertical):
 
     @on(ListView.Selected)
     def on_list_view_selected(self, event: ListView.Selected):
-        """Handles selection of a list from the symbol list ListView."""
-        self.app.active_list_category = event.item.name
-        self._populate_ticker_table()
-        self._update_list_highlight()
+        """Handles selection of a list from the symbol list ListView or toggling a column."""
+        if event.control.id == "symbol-list-view":
+            self.app.active_list_category = event.item.name
+            self._populate_ticker_table()
+            self._update_list_highlight()
+        elif event.control.id == "columns-list-view":
+            # Toggle the switch inside the selected item
+            switch = event.item.query_one(Switch)
+            switch.value = not switch.value
 
     @on(Button.Pressed, "#add_list")
     def on_add_list_pressed(self):
@@ -318,3 +355,107 @@ class ListsConfigView(Vertical):
             self.app.config.save_lists()
             self._populate_ticker_table()
             self.call_later(table.move_cursor, row=idx + 1)
+
+    @on(Switch.Changed)
+    def on_column_visibility_changed(self, event: Switch.Changed):
+        switch = event.switch
+        # Check if this switch belongs to the columns list
+        if "column-switch" not in switch.classes:
+            return
+
+        key = None
+        for ancestor in switch.ancestors:
+            if isinstance(ancestor, ListItem):
+                key = ancestor.name
+                break
+        
+        if not key: return
+            
+        columns = self.app.config.get_setting("column_settings", [])
+        for col in columns:
+            if not isinstance(col, dict): continue
+            if col['key'] == key:
+                col['visible'] = event.value
+                break
+        
+        self.app.config.settings['column_settings'] = columns
+        self.app.config.save_settings()
+
+    def _update_column_highlight(self):
+        """Manually applies a highlight class to the currently selected column item."""
+        try:
+            view = self.query_one("#columns-list-view", ListView)
+            if view.index is not None:
+                for i, item in enumerate(view.children):
+                    if i == view.index:
+                        item.add_class("active-column-item")
+                    else:
+                        item.remove_class("active-column-item")
+        except NoMatches:
+            pass
+
+    @on(ListView.Highlighted)
+    def on_column_highlighted(self, event: ListView.Highlighted):
+        if event.control.id == "columns-list-view":
+            self._update_column_highlight()
+
+    @on(Button.Pressed, "#move_col_up")
+    def on_move_col_up(self):
+        view = self.query_one("#columns-list-view", ListView)
+        idx = view.index
+        if idx is not None and idx > 0:
+            columns = self.app.config.get_setting("column_settings", [])
+            columns.insert(idx - 1, columns.pop(idx))
+            self.app.config.settings['column_settings'] = columns
+            self.app.config.save_settings()
+            
+            self.repopulate_columns()
+            view.index = idx - 1
+            self._update_column_highlight()
+
+    @on(Button.Pressed, "#move_col_down")
+    def on_move_col_down(self):
+        view = self.query_one("#columns-list-view", ListView)
+        idx = view.index
+        columns = self.app.config.get_setting("column_settings", [])
+        if idx is not None and idx < len(columns) - 1:
+            columns.insert(idx + 1, columns.pop(idx))
+            self.app.config.settings['column_settings'] = columns
+            self.app.config.save_settings()
+            
+            self.repopulate_columns()
+            view.index = idx + 1
+            self._update_column_highlight()
+
+    def on_key(self, event) -> None:
+        """Handles key presses for navigating between buttons."""
+        if event.key in ("j", "down", "k", "up"):
+            focused = self.app.focused
+            if isinstance(focused, Button):
+                # Determine direction
+                direction = 1 if event.key in ("j", "down") else -1
+                
+                # Find the container of the focused button
+                parent = focused.parent
+                if parent and parent.id in ("list-buttons", "ticker-buttons-container"):
+                    children = [c for c in parent.children if isinstance(c, Button)]
+                    if focused in children:
+                        idx = children.index(focused)
+                        new_idx = (idx + direction) % len(children)
+                        children[new_idx].focus()
+                        event.stop()
+        elif event.key in ("h", "left", "l", "right"):
+            focused = self.app.focused
+            if isinstance(focused, Button):
+                # Determine direction (left/h = -1, right/l = 1)
+                direction = 1 if event.key in ("l", "right") else -1
+                
+                # Find the container of the focused button
+                parent = focused.parent
+                if parent and parent.id == "column-buttons":
+                    children = [c for c in parent.children if isinstance(c, Button)]
+                    if focused in children:
+                        idx = children.index(focused)
+                        new_idx = (idx + direction) % len(children)
+                        children[new_idx].focus()
+                        event.stop()
