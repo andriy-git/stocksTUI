@@ -1,71 +1,92 @@
 /* Base app layout */
 App {
-  layout: vertical; /* Arranges children vertically */
+  layout: vertical;
+  /* Arranges children vertically */
 }
 
 #app-body {
   layout: vertical;
-  height: 1fr; /* Takes up all available vertical space */
+  height: 1fr;
+  /* Takes up all available vertical space */
 }
 
 #app-grid {
   layout: vertical;
-  height: 1fr; /* Takes up all available vertical space */
+  height: 1fr;
+  /* Takes up all available vertical space */
 }
 
 #tabs-container {
-  height: 3; /* Fixed height for the tabs bar */
-  dock: top; /* Docks the tabs to the top of the app */
-  background: $surface; /* Background color from the theme */
+  height: 3;
+  /* Fixed height for the tabs bar */
+  dock: top;
+  /* Docks the tabs to the top of the app */
+  background: $surface;
+  /* Background color from the theme */
 }
 
 Tab {
-  color: $text-muted; /* Default text color for inactive tabs */
+  color: $text-muted;
+  /* Default text color for inactive tabs */
 }
 
 Tab:hover {
-  background: $panel; /* Background color on hover */
+  background: $panel;
+  /* Background color on hover */
 }
 
 Tab.-active {
-  background: $primary; /* Primary color for the active tab */
-  color: $foreground; /* Foreground color for the active tab */
+  background: $primary;
+  /* Primary color for the active tab */
+  color: $foreground;
+  /* Foreground color for the active tab */
 }
 
 Tabs .underline--bar {
-  color: $primary; /* Color of the active tab underline */
+  color: $primary;
+  /* Color of the active tab underline */
 }
 
 /* Main content area where different views (price table, news, history) are displayed */
 #output-container {
   layout: vertical;
-  height: 1fr; /* Takes up all available vertical space */
+  height: 1fr;
+  /* Takes up all available vertical space */
 }
 
 #price-table {
-  width: 1fr; /* Let table fill the width */
-  height: 1fr; /* Let table fill the remaining vertical space */
+  width: 1fr;
+  /* Let table fill the width */
+  height: 1fr;
+  /* Let table fill the remaining vertical space */
 }
 
 #debug-table {
-  width: auto; /* Width adjusts to content */
-  height: auto; /* Height adjusts to content */
+  width: auto;
+  /* Width adjusts to content */
+  height: auto;
+  /* Height adjusts to content */
 }
 
 /* --- Style DataTable headers to pop --- */
-DataTable > Header {
-  background: $surface; /* Background color for table headers */
-  color: $accent; /* Accent color for header text */
-  text-style: bold; /* Bold text for headers */
+DataTable>Header {
+  background: $surface;
+  /* Background color for table headers */
+  color: $accent;
+  /* Accent color for header text */
+  text-style: bold;
+  /* Bold text for headers */
 }
 
 /* Config container - initially hidden */
 #config-container {
-  display: none; /* Hidden by default */
+  display: none;
+  /* Hidden by default */
   layout: vertical;
   height: 1fr;
   /* FIX: Scrolling is now handled by the child views, not the main container. */
-  padding: 0 1; /* Padding on left and right */
+  padding: 0 1;
+  /* Padding on left and right */
 }
 
 /* FIX: New class to make all config child views scrollable. */
@@ -80,56 +101,55 @@ DataTable > Header {
 /* Top config section with general settings and tab visibility */
 #top-config-container {
   layout: horizontal;
-  height: 28; /* Fixed height */
+  height: auto;
   margin-bottom: 0;
 }
 
 /* General settings panel (left side of top config) */
 #general-settings-container {
-  width: 1fr; /* Takes up available width */
+  width: 1fr;
+  /* Takes up available width */
   height: auto;
   layout: vertical;
-  padding-right: 0;
+  padding-right: 1;
 }
 
 /* Visibility settings panel (right side of top config) */
 #visibility-settings-container {
-  width: 1fr; /* Takes up available width */
+  width: 1fr;
+  /* Takes up available width */
   height: auto;
   layout: vertical;
-  padding-left: 0;
+  padding-left: 1;
 }
 
-#visible-tabs-container {
-  padding: 0;
-  margin-top: 0;
-  border: round $primary; /* Rounded border with primary color */
-  /* FIX: Use `1fr` to give the container a constrained height, allowing
-     the content to overflow and the scrollbar to appear. `auto` would
-     cause the container to grow indefinitely. */
-  height: 1fr;
-  overflow-y: auto;
-  width: 100%;
+#visible-tabs-list-view {
+  height: 20;
+  border: round $primary;
 }
 
-#visible-tabs-container Checkbox {
-  height: 3;
-  padding: 0 0;
-  color: $foreground;
-  content-align: left middle; /* Aligns content to the left and middle */
-  width: 100%;
+#visible-tabs-list-view>ListItem.active-column-item {
+  background: $secondary;
+  color: $background;
+}
+
+.tab-switch {
+  background: transparent;
+  border: none;
 }
 
 /* List management section (bottom part of config view) */
 #list-management-container {
   layout: horizontal;
-  height: 27; /* Fixed height */
+  height: 27;
+  /* Fixed height for lists/tickers */
   min-height: 15;
 }
 
 /* List view container (left side of list management) */
 #list-view-container {
-  width: 40%; /* Takes up 40% of the width */
+  width: 40%;
+  /* Takes up 40% of the width */
   height: 100%;
   layout: vertical;
   border: round $primary;
@@ -138,7 +158,8 @@ DataTable > Header {
 
 /* Ticker view container (right side of list management) */
 #ticker-view-container {
-  width: 1fr; /* Takes up remaining width */
+  width: 1fr;
+  /* Takes up remaining width */
   height: 100%;
   layout: vertical;
   border: round $primary;
@@ -148,13 +169,17 @@ DataTable > Header {
 /* Styling for ListView and DataTable within config */
 #symbol-list-view,
 #ticker-table {
-  height: 10; /* Fixed height */
-  border: none; /* No border */
+  height: 10;
+  /* Fixed height */
+  border: none;
+  /* No border */
 }
 
 #list-view-container ListItem.active-list-item {
-  background: $accent; /* Accent color for active list item background */
-  color: $foreground; /* Foreground color for active list item text */
+  background: $accent;
+  /* Accent color for active list item background */
+  color: $foreground;
+  /* Foreground color for active list item text */
 }
 
 /* Button containers for list and ticker management */
@@ -167,17 +192,22 @@ DataTable > Header {
 
 #list-buttons Button,
 #ticker-buttons-container Button {
-  width: 100%; /* Buttons take full width */
+  width: 100%;
+  /* Buttons take full width */
+  height: 3;
+  /* Explicit height as requested */
   margin-bottom: 0;
 }
 
 /* Input styling */
 #refresh-interval-input {
-  width: 1fr; /* Takes up available width */
+  width: 1fr;
+  /* Takes up available width */
 }
 
 #search-box:focus {
-  outline: tall $accent; /* Highlight search box on focus */
+  outline: tall $accent;
+  /* Highlight search box on focus */
 }
 
 #update-refresh-interval {
@@ -189,12 +219,14 @@ DataTable > Header {
 /* Debug Tab Buttons */
 .debug-buttons {
   height: auto;
-  align: center middle; /* Centers buttons horizontally and vertically */
+  align: center middle;
+  /* Centers buttons horizontally and vertically */
   padding: 1 0;
 }
 
 .debug-buttons Button {
-  margin: 0 1; /* Margin between buttons */
+  margin: 0 1;
+  /* Margin between buttons */
 }
 
 /* History Tab Controls */
@@ -278,7 +310,7 @@ DataTable > Header {
   padding: 1 2;
 }
 
-#dialog > Label {
+#dialog>Label {
   width: 100%;
   margin-bottom: 0;
 }
@@ -294,19 +326,31 @@ DataTable > Header {
   margin-left: 2;
 }
 
-.config-option-stacked {
-  height: auto;
+.config-option-horizontal {
+  height: 3;
+  layout: horizontal;
   margin-bottom: 1;
+  align: left middle;
 }
 
-.config-option-stacked > Label {
-  margin-bottom: 0;
+.config-label {
+  width: 20;
+  content-align: left middle;
+  height: 100%;
+}
+
+.config-option-horizontal>Select,
+.config-option-horizontal>Switch,
+.config-option-horizontal>Input {
+  width: 1fr;
+  min-width: 20;
 }
 
 .config-header {
   text-style: bold;
-  background: $primary;
-  color: $text;
+  color: $accent;
+  margin-top: 1;
+  margin-bottom: 0;
 }
 
 #info-message {
@@ -325,14 +369,17 @@ DataTable > Header {
 }
 
 .news-controls {
-  height: 5; /* Input height (3) + 2*padding (1+1) */
+  height: 5;
+  /* Input height (3) + 2*padding (1+1) */
 }
 
 /* Style the source ticker in the news view */
-Markdown .strong > .code {
+Markdown .strong>.code {
   color: $secondary;
-  text-style: bold; /* Ensure it remains bold */
-  background: $surface; /* Match background for seamless look */
+  text-style: bold;
+  /* Ensure it remains bold */
+  background: $surface;
+  /* Match background for seamless look */
 }
 
 Footer {
@@ -444,6 +491,67 @@ Footer {
 }
 
 .config-hub-button {
-    width: 50%;
-    height: 5;
+  width: 50%;
+  height: 5;
+}
+
+/* Column Management in Lists Config */
+#columns-management-container {
+  layout: horizontal;
+  height: auto;
+  margin-top: 1;
+  border-top: solid $primary;
+  padding-top: 1;
+}
+
+#columns-list-container {
+  width: 1fr;
+  height: auto;
+}
+
+#columns-list-view {
+  height: 8;
+  /* Fixed height to show approx 3 items */
+  border: round $primary;
+}
+
+#columns-list-view>ListItem.active-column-item {
+  background: $secondary;
+  color: $background;
+}
+
+#column-buttons {
+  width: 100%;
+  height: auto;
+  layout: horizontal;
+  margin-top: 1;
+}
+
+.small-button {
+  height: 3;
+  width: 1fr;
+  margin-right: 1;
+  margin-bottom: 0;
+}
+
+.column-item-layout {
+  height: auto;
+  align: left middle;
+  padding: 0 1;
+}
+
+.column-label {
+  width: 1fr;
+}
+
+.column-switch {
+  background: transparent;
+  border: none;
+}
+
+.config-header-small {
+  text-style: bold;
+  color: $accent;
+  margin-top: 1;
+  margin-bottom: 0;
 }
