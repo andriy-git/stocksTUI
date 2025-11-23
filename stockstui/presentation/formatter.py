@@ -49,16 +49,50 @@ def format_price_data_for_table(data: list[dict], old_prices: dict, alias_map: d
         fifty_two_week_high = item.get('fifty_two_week_high')
         fifty_two_week_range_str = f"${fifty_two_week_low:,.2f} - ${fifty_two_week_high:,.2f}" if fifty_two_week_low is not None and fifty_two_week_high is not None else "N/A"
 
-        rows.append((
-            description,
-            price,
-            change,
-            change_percent,
-            day_range_str,
-            fifty_two_week_range_str,
-            symbol,
-            change_direction
-        ))
+        volume = item.get('volume')
+        volume_str = f"{volume:,}" if volume is not None else "N/A"
+
+        open_price = item.get('open')
+        open_str = f"${open_price:,.2f}" if open_price is not None else "N/A"
+
+        prev_close_str = f"${previous_close:,.2f}" if previous_close is not None else "N/A"
+
+        # Return a dictionary so columns can be selected dynamically
+        rows.append({
+            "Description": description,
+            "Price": price, # Keep raw for sorting/formatting later if needed, or format here? 
+                            # The original code returned raw price in the tuple, but formatted it inside the loop.
+                            # Wait, the original code returned a tuple of *formatted* strings (mostly).
+                            # Let's look at the original code again.
+                            # Original: 
+                            # rows.append((description, price, change, change_percent, day_range_str, fifty_two_week_range_str, symbol, change_direction))
+                            # And then _style_and_populate_price_table did the formatting for Price/Change.
+                            # I should probably keep providing raw values where _style_and_populate_price_table expects them, 
+                            # OR move all formatting here.
+                            # _style_and_populate_price_table applies colors. 
+                            # So I should provide the raw values for Price/Change so they can be colored.
+                            # For the new columns (Volume, Open, Prev Close), I can provide formatted strings or raw values.
+                            # Let's provide raw values where possible to allow for potential future styling, 
+                            # but for now I'll just provide the values needed.
+            
+            "Change": change,
+            "% Change": change_percent,
+            "Day's Range": day_range_str,
+            "52-Wk Range": fifty_two_week_range_str,
+            "Ticker": symbol,
+            "Volume": volume_str, # No special coloring needed yet
+            "Open": open_str,
+            "Prev Close": prev_close_str,
+            "PE Ratio": f"{item.get('pe_ratio', 0):.2f}" if item.get('pe_ratio') else "N/A",
+            "Market Cap": f"{item.get('market_cap', 0):,}" if item.get('market_cap') else "N/A",
+            "Div Yield": f"{item.get('dividend_yield', 0):.2f}%" if item.get('dividend_yield') else "N/A",
+            "EPS": f"{item.get('eps', 0):.2f}" if item.get('eps') else "N/A",
+            "Beta": f"{item.get('beta', 0):.2f}" if item.get('beta') else "N/A",
+            "_change_direction": change_direction, # Internal use
+            "_raw_price": price, # For sorting if needed, though Price is used for display
+            "_raw_change": change,
+            "_raw_change_percent": change_percent
+        })
     return rows
 
 def format_historical_data_as_table(data):
