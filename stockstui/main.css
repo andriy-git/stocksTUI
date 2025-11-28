@@ -555,3 +555,61 @@ Footer {
   margin-top: 1;
   margin-bottom: 0;
 }
+
+/* Options View Styles */
+#options-display-container {
+  height: 1fr;
+  width: 1fr;
+  layout: vertical;
+}
+
+#options-content-switcher {
+  height: 1fr;
+  width: 1fr;
+}
+
+#options-tables-view {
+  height: 1fr;
+  width: 1fr;
+  layout: horizontal;
+}
+
+/* Make the sections (Vertical containers holding label + table) take full space */
+#options-tables-view > Vertical {
+  width: 1fr;
+  height: 1fr;
+  padding: 0 1;
+}
+
+#options-calls-table, #options-puts-table {
+  height: 1fr;
+  width: 1fr;
+}
+
+#options-chart-view {
+  height: 1fr;
+  width: 1fr;
+}
+
+.options_controls {
+  height: 3;
+  width: 100%;
+  margin-bottom: 1;
+  padding: 0 1;
+}
+
+.options-table-header {
+  text-align: center;
+  width: 100%;
+  background: $surface;
+  color: $accent;
+  text-style: bold;
+}
+
+#options-info-header {
+  text-align: center;
+  width: 100%;
+  padding: 0 1;
+  margin-bottom: 1;
+  color: $text-muted;
+}
