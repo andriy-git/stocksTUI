@@ -712,12 +712,16 @@ class StocksTUI(App):
         """Starts or stops the auto-refresh timer for prices based on config."""
         if self.price_refresh_timer:
             self.price_refresh_timer.stop()
+            self.price_refresh_timer = None
         if self.config.get_setting("auto_refresh", False):
             try:
                 interval = float(self.config.get_setting("refresh_interval", 300.0))
                 self.price_refresh_timer = self.set_interval(interval, lambda: self.action_refresh(force=False))
+                logging.info(f"Auto-refresh timer started with interval of {interval} seconds.")
             except (ValueError, TypeError):
                 logging.error("Invalid refresh interval.")
+        else:
+            logging.info("Auto-refresh is disabled.")
     
     def _schedule_next_market_status_refresh(self, status: dict):
         """
