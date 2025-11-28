@@ -20,6 +20,9 @@ A fast, minimalist terminal app for checking stock prices, crypto, news, and his
 *   **Charts & Tables, Your Way**
     View historical performance from `1D` to `Max`, from a table or a chart.
 
+*   **Options Chain Support**
+    View detailed options chains with strike prices, bid/ask spreads, Greeks (Delta, Gamma, Theta, Vega), and open interest visualization. Track your positions with quantity and average cost.
+
 *   **News That Matters**
     See the latest headlines per ticker or a combined feed — no ads, no autoplay videos, just info.
 
@@ -88,8 +91,8 @@ stockstui
 Need help?
 
 ```bash
-stockstui -h          # Short help  
-stockstui --man       # Full user manual  
+stockstui -h          # Short help
+stockstui --man       # Full user manual
 ```
 
 ---
@@ -107,6 +110,12 @@ stockstui --news "NVDA,AMD"
 ```
 
 Get combined news for NVIDIA and AMD.
+
+```bash
+stockstui --options AAPL
+```
+
+Open on Apple's Options tab to view the options chain.
 
 ```bash
 stockstui --session-list "EV Stocks=TSLA,RIVN,LCID"
