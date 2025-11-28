@@ -38,10 +38,11 @@ from stockstui.config_manager import ConfigManager
 from stockstui.common import (PriceDataUpdated, NewsDataUpdated,
                               TickerDebugDataUpdated, ListDebugDataUpdated, CacheTestDataUpdated,
                               MarketStatusUpdated, HistoricalDataUpdated, TickerInfoComparisonUpdated,
-                              PortfolioChanged, PortfolioDataUpdated)
+                              PortfolioChanged, PortfolioDataUpdated, OptionsDataUpdated, OptionsExpirationsUpdated)
 from stockstui.data_providers.portfolio import PortfolioManager
 from stockstui.ui.widgets.search_box import SearchBox
 from stockstui.ui.widgets.tag_filter import TagFilterWidget, TagFilterChanged
+from stockstui.ui.quick_edit_ticker_modal import QuickEditTickerModal
 # Import the new container instead of the old view
 from stockstui.ui.views.config_view import ConfigContainer
 from stockstui.ui.views.config_views.general_config_view import GeneralConfigView
@@ -49,8 +50,10 @@ from stockstui.ui.views.config_views.lists_config_view import ListsConfigView
 from stockstui.ui.views.history_view import HistoryView
 from stockstui.ui.views.news_view import NewsView
 from stockstui.ui.views.debug_view import DebugView
+from stockstui.ui.views.options_view import OptionsView
 from stockstui.ui.widgets.navigable_data_table import NavigableDataTable
 from stockstui.data_providers import market_provider
+from stockstui.data_providers import options_provider
 from stockstui.presentation import formatter
 from stockstui.utils import extract_cell_text
 from stockstui.database.db_manager import DbManager
@@ -126,10 +129,12 @@ class StocksTUI(App):
         Binding("r", "refresh(False)", "Refresh", show=True),
         Binding("R", "refresh(True)", "Force Refresh", show=True),
         Binding("s", "enter_sort_mode", "Sort", show=True),
+        Binding("o", "enter_open_mode", "Open", show=True),
         Binding("/", "focus_search", "Search", show=True),
         Binding("f", "toggle_tag_filter", "Filter", show=True),
         Binding("?", "toggle_help", "Toggle Help", show=True),
         Binding("i", "focus_input", "Input", show=False),
+        Binding("enter", "activate_tab", "Activate Tab", show=False),
         Binding("d", "handle_sort_key('d')", "Sort by Description/Date", show=False),
         Binding("p", "handle_sort_key('p')", "Sort by Price", show=False),
         Binding("c", "handle_sort_key('c')", "Sort by Change/Close", show=False),
@@ -140,6 +145,8 @@ class StocksTUI(App):
         Binding("H", "handle_sort_key('H')", "Sort by High", show=False),
         Binding("L", "handle_sort_key('L')", "Sort by Low", show=False),
         Binding("v", "handle_sort_key('v')", "Sort by Volume", show=False),
+        Binding("n", "handle_open_key('n')", "Open in News", show=False),
+        Binding("h", "handle_open_key('h')", "Open in History", show=False),
         Binding("ctrl+c", "copy_text", "Copy", show=False),
         Binding("ctrl+C", "copy_text", "Copy", show=False),
         # FIX: Split the bindings. Escape has its own dedicated action.
@@ -155,6 +162,7 @@ class StocksTUI(App):
     active_list_category = reactive(None)
     news_ticker = reactive(None)
     history_ticker = reactive(None)
+    options_ticker = reactive(None)
     search_target_table = reactive(None)
     selected_portfolio = reactive("default")
     active_tag_filter = reactive([])
@@ -195,6 +203,8 @@ class StocksTUI(App):
         self.theme_variables = {}
         self._original_table_data = []
         self._last_historical_data = None
+        self._last_options_data = None
+        self.option_positions = self.db_manager.get_all_option_positions()
         self._news_content_for_ticker: str | None = None
         self._last_news_content: tuple[Union[str, Text], list[str]] | None = None
         self._sort_column_key: str | None = None
@@ -203,10 +213,32 @@ class StocksTUI(App):
         self._history_sort_reverse: bool = False
         self._history_period = "1mo"
         self._sort_mode = False
+        self._open_mode = False
         self._original_status_text = None
         self._last_active_category: str | None = None
         self._last_config_sub_view: str | None = None
         self._force_config_sub_view: str | None = None  # Used to temporarily force a config view after operations
+        self._pre_refresh_cursor_key = None
+        self._pre_refresh_cursor_column = None
+        self._is_filter_refresh = False
+
+    def add_option_position(self, symbol: str, ticker: str, quantity: float, avg_cost: float):
+        """Adds or updates an option position."""
+        self.db_manager.save_option_position(symbol, ticker, quantity, avg_cost)
+        self.option_positions[symbol] = {
+            'symbol': symbol,
+            'ticker': ticker,
+            'quantity': quantity,
+            'avg_cost': avg_cost
+        }
+        self.notify(f"Position saved: {symbol}")
+
+    def remove_option_position(self, symbol: str):
+        """Removes an option position."""
+        self.db_manager.delete_option_position(symbol)
+        if symbol in self.option_positions:
+            del self.option_positions[symbol]
+        self.notify(f"Position removed: {symbol}")
         self._pre_refresh_cursor_key = None
         self._pre_refresh_cursor_column = None
         self._is_filter_refresh = False
@@ -243,6 +275,10 @@ class StocksTUI(App):
         Called when the app is first mounted.
         """
         logging.info("Application mounting.")
+        
+        # Ensure themes are registered - safety check in case __init__ didn't complete
+        if not self._available_theme_names:
+            self._load_and_register_themes()
         
         default_theme = "gruvbox_soft_dark"
         active_theme = self.config.get_setting("theme", default_theme)
@@ -341,42 +377,45 @@ class StocksTUI(App):
             if last_key is not None and getattr(last_key, "key", None) != "escape":
                 return
 
-        # Priority 1: Clear sort mode if active.
+        # Priority 1: Clear sort or open mode if active.
         if self._sort_mode:
             self._sort_mode = False
-            try:
-                status_label = self.query_one("#last-refresh-time", Label)
-                if self._original_status_text is not None:
-                    status_label.update(self._original_status_text)
-            except NoMatches:
-                pass
+            self._restore_status_label()
+            return
+        if self._open_mode:
+            self._open_mode = False
+            self._restore_status_label()
             return
 
         # Priority 2: Dismiss the search box if it's active.
         try:
-            search_box = self.query_one(SearchBox)
-            if self._original_table_data:
-                self.search_target_table.clear()
-                for row_key, row_data in self._original_table_data:
-                    self.search_target_table.add_row(*row_data, key=row_key.value)
-            search_box.remove()
+            self.query_one(SearchBox).remove()
+            self._original_table_data = []
             return
         except NoMatches:
             pass
-        
-        # Priority 3: Handle back-navigation within the ConfigContainer.
-        if self.get_active_category() == "configs":
-            try:
-                config_container = self.query_one(ConfigContainer)
-                # The container's action returns True if it successfully navigated back.
-                if config_container.action_go_back():
-                    return
-            except NoMatches:
-                pass
+
+        # Priority 3: If inside the config container, try to navigate back to the main config view.
+        try:
+            config_container = self.query_one(ConfigContainer)
+            # The container's action returns True if it successfully navigated back.
+            if config_container.action_go_back():
+                return
+        except NoMatches:
+            pass
 
         # Fallback: If no other context was handled, focus the main tabs.
         try:
             self.query_one(Tabs).focus()
+        except NoMatches:
+            pass
+
+    def _restore_status_label(self) -> None:
+        """Restores the original status label text."""
+        try:
+            status_label = self.query_one("#last-refresh-time", Label)
+            if self._original_status_text is not None:
+                status_label.update(self._original_status_text)
         except NoMatches:
             pass
 
@@ -481,7 +520,7 @@ class StocksTUI(App):
             tag_filter = self.query_one("#tag-filter")
             category = self.get_active_category()
             
-            if category and category not in ["history", "news", "debug", "configs"]:
+            if category and category not in ["history", "news", "options", "debug", "configs"]:
                 if category == 'all':
                     hidden_tabs = set(self.config.get_setting("hidden_tabs", []))
                     total_symbols = list(set(s['ticker'] for list_name, lst in self.config.lists.items() for s in lst if list_name not in hidden_tabs))
@@ -557,7 +596,7 @@ class StocksTUI(App):
         hidden_tabs = set(self.config.get_setting("hidden_tabs", []))
         
         all_list_categories = list(self.config.lists.keys())
-        all_possible_categories = ["all"] + all_list_categories + ["history", "news", "debug"]
+        all_possible_categories = ["all"] + all_list_categories + ["history", "news", "options", "debug"]
         
         for category in all_possible_categories:
             if category not in hidden_tabs:
@@ -721,7 +760,7 @@ class StocksTUI(App):
         Refreshes price data for the current view.
         """
         category = self.get_active_category()
-        if category and category not in ["history", "news", "debug", "configs"]:
+        if category and category not in ["history", "news", "options", "debug", "configs"]:
             if category == 'all':
                 seen = set()
                 hidden_tabs = set(self.config.get_setting("hidden_tabs", []))
@@ -754,7 +793,7 @@ class StocksTUI(App):
     def action_toggle_tag_filter(self) -> None:
         """Toggles the visibility of the tag filter widget if it has tags."""
         category = self.get_active_category()
-        if category and category in ["history", "news", "debug", "configs"]:
+        if category and category in ["history", "news", "options", "debug", "configs"]:
             self.bell()
             return
 
@@ -804,6 +843,8 @@ class StocksTUI(App):
             target_id = '#history-ticker-input'
         elif category == 'news':
             target_id = '#news-ticker-input'
+        elif category == 'options':
+            target_id = '#options-ticker-input'
         elif category == 'configs':
             target_id = '#config-container'
         elif category == 'debug':
@@ -885,10 +926,12 @@ class StocksTUI(App):
             await output_container.mount(HistoryView())
         elif category == 'news':
             await output_container.mount(NewsView())
+        elif category == 'options':
+            await output_container.mount(OptionsView())
         elif category == 'debug':
             await output_container.mount(DebugView())
         else:
-            if category not in ["history", "news", "debug", "configs"]:
+            if category not in ["history", "news", "options", "debug", "configs"]:
                 available_tags = self._get_available_tags_for_category(category)
                 tag_filter = TagFilterWidget(available_tags=available_tags, id="tag-filter")
                 tag_filter.display = False
@@ -991,6 +1034,39 @@ class StocksTUI(App):
                 self.post_message(HistoricalDataUpdated(data))
         except Exception as e:
             logging.error(f"Worker fetch_historical_data failed for {ticker} over {period} with interval {interval}: {e}")
+
+    @work(exclusive=True, thread=True)
+    def fetch_options_expirations(self, ticker: str):
+        """Worker to fetch available expiration dates for a ticker's options."""
+        try:
+            expirations = options_provider.get_available_expirations(ticker)
+            if not get_current_worker().is_cancelled:
+                self.post_message(OptionsExpirationsUpdated(ticker, expirations or ()))
+        except Exception as e:
+            logging.error(f"Worker fetch_options_expirations failed for {ticker}: {e}")
+            if not get_current_worker().is_cancelled:
+                self.post_message(OptionsExpirationsUpdated(ticker, ()))
+
+    @work(exclusive=True, thread=True)
+    def fetch_options_chain(self, ticker: str, expiration: str):
+        """Worker to fetch options chain data for a ticker and expiration date."""
+        try:
+            options_data = options_provider.get_options_chain(ticker, expiration)
+            if not get_current_worker().is_cancelled:
+                if options_data:
+                    self.post_message(OptionsDataUpdated(
+                        ticker, expiration,
+                        options_data.get('calls'),
+                        options_data.get('puts'),
+                        options_data.get('underlying')
+                    ))
+                else:
+                    # Post error
+                    self._last_options_data = {'error': f'Could not fetch options data for {ticker}'}
+        except Exception as e:
+            logging.error(f"Worker fetch_options_chain failed for {ticker} expiring {expiration}: {e}")
+            if not get_current_worker().is_cancelled:
+                self._last_options_data = {'error': str(e)}
 
     @work(exclusive=True, thread=True)
     def run_info_comparison_test(self, ticker: str):
@@ -1106,7 +1182,7 @@ class StocksTUI(App):
             self._last_refresh_times[message.category] = now_str
         
         active_category = self.get_active_category()
-        is_relevant = (active_category == message.category) or (message.category == 'all' and active_category not in ['history', 'news', 'debug', 'configs'])
+        is_relevant = (active_category == message.category) or (message.category == 'all' and active_category not in ['history', 'news', 'options', 'debug', 'configs'])
         if not is_relevant: return
 
         try:
@@ -1215,6 +1291,40 @@ class StocksTUI(App):
             history_view = self.query_one(HistoryView)
             await history_view._render_historical_data()
         except NoMatches: pass
+
+    @on(OptionsExpirationsUpdated)
+    async def on_options_expirations_updated(self, message: OptionsExpirationsUpdated):
+        """Handles arrival of options expiration dates, populates the expiration selector."""
+        if self.get_active_category() != 'options' or self.options_ticker != message.ticker:
+            return
+        
+        try:
+            options_view = self.query_one(OptionsView)
+            options_view.update_expirations(message.expirations or [])
+        except NoMatches:
+            pass
+
+    @on(OptionsDataUpdated)
+    async def on_options_data_updated(self, message: OptionsDataUpdated):
+        """Handles arrival of options chain data, tells the options view to render it."""
+        try:
+            self.query_one("#options-display-container").loading = False
+        except NoMatches:
+            return
+
+        self._last_options_data = {
+            'ticker': message.ticker,
+            'expiration': message.expiration,
+            'calls': message.calls_data,
+            'puts': message.puts_data,
+            'underlying': message.underlying
+        }
+        
+        try:
+            options_view = self.query_one(OptionsView)
+            await options_view._render_options_data()
+        except NoMatches:
+            pass
 
     @on(NewsDataUpdated)
     async def on_news_data_updated(self, message: NewsDataUpdated):
@@ -1391,14 +1501,14 @@ class StocksTUI(App):
 
         try:
             status_label = self.query_one("#last-refresh-time")
-            if new_category in ['history', 'news', 'debug', 'configs']:
+            if new_category in ['history', 'news', 'options', 'debug', 'configs']:
                 status_label.update("")
         except NoMatches:
             pass
 
         # If we're leaving the configs tab, maintain the sub-view so we return to the same view
         # Only clear the config sub-view when going to completely different UI modes
-        if new_category not in ['history', 'news', 'debug'] and self._last_active_category == 'configs':
+        if new_category not in ['history', 'news', 'options', 'debug'] and self._last_active_category == 'configs':
             # We're leaving configs, but not going to a special mode like history/news/debug
             # Keep the last config sub-view so we return to it if we come back to configs
             pass
@@ -1474,6 +1584,84 @@ class StocksTUI(App):
         if (target_widget := self._get_primary_view_widget()):
             target_widget.focus()
 
+    def action_activate_tab(self) -> None:
+        """When Enter is pressed on Tabs, focus the primary widget of the active tab."""
+        # Only activate if Tabs currently has focus
+        if self.focused and isinstance(self.focused, Tabs):
+            if (target_widget := self._get_primary_view_widget()):
+                target_widget.focus()
+
+    async def action_enter_open_mode(self) -> None:
+        """Enters 'open mode', or if already in open mode, opens the ticker in Options."""
+        # If already in open mode, treat this as 'open in options'
+        if self._open_mode:
+            await self.action_handle_open_key('o')
+            return
+            
+        category = self.get_active_category()
+        
+        # Only activate open mode for price table views
+        if category and category not in ['news', 'history', 'options', 'debug', 'configs']:
+            try:
+                # Check if a row is selected
+                price_table = self.query_one("#price-table", NavigableDataTable)
+                if price_table.cursor_row >= 0:
+                    self._open_mode = True
+                    status_label = self.query_one("#last-refresh-time", Label)
+                    self._original_status_text = status_label.renderable
+                    status_label.update("OPEN IN: \\[n]ews, \\[h]istory, \\[o]ptions, \\[ESC]ape")
+                else:
+                    self.bell()
+            except NoMatches:
+                self.bell()
+        else:
+            self.bell()
+
+    async def action_handle_open_key(self, key: str) -> None:
+        """Handles a key press while in open mode to navigate to a different view."""
+        if not self._open_mode: return
+        
+        try:
+            price_table = self.query_one("#price-table", NavigableDataTable)
+            if price_table.cursor_row < 0:
+                self.action_back_or_dismiss()
+                return
+                
+            # Get the ticker from the row key (same as edit command does)
+            coordinate = Coordinate(row=price_table.cursor_row, column=0)
+            ticker = price_table.coordinate_to_cell_key(coordinate).row_key.value
+            
+            if not ticker:
+                self.action_back_or_dismiss()
+                return
+            
+            # Find the tab index for the target category
+            target_category = None
+            if key == 'n':  # News
+                target_category = 'news'
+                self.news_ticker = ticker
+            elif key == 'h':  # History
+                target_category = 'history'
+                self.history_ticker = ticker
+            elif key == 'o':  # Options
+                target_category = 'options'
+                self.options_ticker = ticker
+            
+            if target_category:
+                # Find the tab ID for this category
+                try:
+                    idx = next(i for i, t in enumerate(self.tab_map, start=1) if t['category'] == target_category)
+                    tabs = self.query_one(Tabs)
+                    tabs.active = f"tab-{idx}"
+                except (StopIteration, NoMatches):
+                    self.notify(f"Tab '{target_category}' not found", severity="error")
+            
+            # Exit open mode
+            self.action_back_or_dismiss()
+            
+        except (NoMatches, IndexError):
+            self.action_back_or_dismiss()
+
     async def action_handle_sort_key(self, key: str) -> None:
         """Handles a key press while in sort mode to apply a specific sort."""
         if not self._sort_mode: return
@@ -1545,6 +1733,77 @@ class StocksTUI(App):
         """Removes the search box when the user presses Enter."""
         try: self.query_one(SearchBox).remove()
         except NoMatches: pass
+    
+    def action_edit_ticker_quick(self) -> None:
+        """Opens a quick edit modal for the currently selected ticker."""
+        # Only allow when not in sort mode
+        if self._sort_mode:
+            return
+        
+        category = self.get_active_category()
+        # Only work on ticker list tabs, not special views
+        if not category or category in ['history', 'news', 'options', 'debug', 'configs']:
+            self.bell()
+            return
+        
+        try:
+            price_table = self.query_one("#price-table", DataTable)
+            if price_table.cursor_row < 0:
+                self.notify("Select a ticker to edit.", severity="warning")
+                return
+            
+            # Get the ticker symbol from the row key (not from a column, as column order is configurable)
+            coordinate = Coordinate(row=price_table.cursor_row, column=0)
+            ticker = price_table.coordinate_to_cell_key(coordinate).row_key.value
+            
+            # Find the ticker in the config to get current values
+            ticker_data = None
+            list_names = []
+            
+            # Check if this is the 'all' category
+            if category == 'all':
+                hidden_tabs = set(self.config.get_setting("hidden_tabs", []))
+                for list_name, list_data in self.config.lists.items():
+                    if list_name not in hidden_tabs:
+                        for item in list_data:
+                            if item.get('ticker', '').upper() == ticker.upper():
+                                if ticker_data is None:
+                                    ticker_data = item.copy()
+                                list_names.append(list_name)
+                                break
+            else:
+                # Single list category
+                list_data = self.config.lists.get(category, [])
+                for item in list_data:
+                    if item.get('ticker', '').upper() == ticker.upper():
+                        ticker_data = item.copy()
+                        list_names.append(category)
+                        break
+            
+            if not ticker_data:
+                self.notify(f"Could not find ticker '{ticker}' in configuration.", severity="error")
+                return
+            
+            def on_close(result: tuple[str, str] | None):
+                if result:
+                    field, value = result
+                    
+                    # Update the ticker in all relevant lists
+                    for list_name in list_names:
+                        for item in self.config.lists[list_name]:
+                            if item.get('ticker', '').upper() == ticker.upper():
+                                item[field] = value
+                                break
+                    
+                    self.config.save_lists()
+                    # Refresh the display
+                    self.action_refresh(force=False)
+                    self.notify(f"Updated {field} for '{ticker}'.")
+            
+            self.push_screen(QuickEditTickerModal(ticker, category, ticker_data), on_close)
+        
+        except NoMatches:
+            self.bell()
     
     @on(TagFilterChanged)
     def on_tag_filter_changed(self, message: TagFilterChanged) -> None:
