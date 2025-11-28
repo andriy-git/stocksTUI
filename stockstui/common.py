@@ -62,6 +62,23 @@ class PortfolioDataUpdated(Message):
         self.tickers = tickers
         super().__init__()
 
+class OptionsDataUpdated(Message):
+    """Posted when options chain data has been fetched."""
+    def __init__(self, ticker: str, expiration: str, calls_data, puts_data, underlying: dict | None) -> None:
+        self.ticker = ticker
+        self.expiration = expiration
+        self.calls_data = calls_data  # pandas DataFrame
+        self.puts_data = puts_data    # pandas DataFrame
+        self.underlying = underlying
+        super().__init__()
+
+class OptionsExpirationsUpdated(Message):
+    """Posted when available expiration dates for a ticker have been fetched."""
+    def __init__(self, ticker: str, expirations: tuple[str, ...]) -> None:
+        self.ticker = ticker
+        self.expirations = expirations
+        super().__init__()
+
 class NotEmpty(Validator):
     def validate(self, value: str) -> ValidationResult:
         if value.strip(): return self.success()
