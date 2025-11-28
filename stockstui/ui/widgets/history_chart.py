@@ -30,14 +30,24 @@ class HistoryChart(PlotextPlot):
 
         # Convert datetime index to numerical unix timestamps for plotting on the x-axis
         x_data = [d.timestamp() for d in self._data.index]
-        y_data = self._data['Close'].tolist() # Get closing prices for the y-axis
         
-        plt.plot(x_data, y_data, color="orange") # Plot the closing price history
+        # Try to get closing prices, fall back to other columns if Close is missing
+        if 'Close' in self._data.columns:
+            y_data = self._data['Close'].tolist()
+        elif 'Open' in self._data.columns:
+            y_data = self._data['Open'].tolist()
+        elif len(self._data.columns) > 0:
+            # Use the first available numeric column
+            y_data = self._data.iloc[:, 0].tolist()
+        else:
+            return # No data to plot
+        
+        plt.plot(x_data, y_data, color="orange") # Plot the price history
 
         self._set_date_ticks() # Configure x-axis (date) ticks and labels
         self._set_price_ticks() # Configure y-axis (price) ticks and labels
 
-        plt.title('Closing Price History') # Set chart title
+        plt.title('Price History') # Set chart title
         plt.ylabel('Price (USD)') # Set y-axis label
         plt.grid(True, True) # Enable grid lines for better readability
 
@@ -91,7 +101,20 @@ class HistoryChart(PlotextPlot):
         It calculates appropriate tick positions and forces plotext to use them.
         """
         plt = self.plt
-        y_min, y_max = self._data['Close'].min(), self._data['Close'].max()
+        
+        # Find the first numeric column to use for y-axis range
+        price_column = None
+        if 'Close' in self._data.columns:
+            price_column = 'Close'
+        elif 'Open' in self._data.columns:
+            price_column = 'Open'
+        elif len(self._data.columns) > 0:
+            price_column = self._data.columns[0]
+        
+        if price_column is None:
+            return
+            
+        y_min, y_max = self._data[price_column].min(), self._data[price_column].max()
 
         if y_min is not None and y_max is not None and y_max >= y_min:
             # Determine the number of ticks based on available vertical space.
@@ -106,7 +129,13 @@ class HistoryChart(PlotextPlot):
             # Then, set the y-axis limits to match our calculated ticks. This is the crucial step
             # to ensure plotext uses our custom ticks correctly.
             if ticks:
-                plt.ylim(ticks[0], ticks[-1])
+                if len(ticks) > 1:
+                    plt.ylim(ticks[0], ticks[-1])
+                else:
+                    # Handle single tick case (flat line) to avoid plotext error (division by zero)
+                    val = ticks[0]
+                    delta = abs(val) * 0.05 if val != 0 else 1.0
+                    plt.ylim(val - delta, val + delta)
             
             # Finally, apply our calculated ticks and labels.
             plt.yticks(ticks, labels)

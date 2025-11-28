@@ -8,4 +8,6 @@ class NavigableDataTable(DataTable):
         # This binding allows using backspace to navigate "back" (e.g., focus tabs)
         # when the table is focused, without interfering with Input widgets.
         Binding("backspace", "app.back_or_dismiss", "Back", show=False),
+        # This binding allows using 'e' to quickly edit a ticker
+        Binding("e", "app.edit_ticker_quick", "Quick Edit", show=False),
     ]
