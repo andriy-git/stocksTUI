@@ -62,7 +62,7 @@ class GeneralConfigView(Vertical):
             all_tabs.extend(list(self.app.config.lists.keys()))
             
         # Add other static tabs
-        all_tabs.extend(["history", "news", "debug"])
+        all_tabs.extend(["history", "news", "options", "debug"])
         
         # Remove duplicates and preserve order (though dict keys are ordered in recent Python)
         seen = set()
