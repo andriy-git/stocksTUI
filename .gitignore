@@ -11,3 +11,6 @@ run.sh
 /dist/
 /build/
 /*.egg-info/
+
+# Test coverage
+.coverage
