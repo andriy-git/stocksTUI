@@ -315,6 +315,9 @@ class StocksTUI(App):
             elif cli_news := self.cli_overrides.get('news'):
                 start_category = 'news'
                 if isinstance(cli_news, str): self.news_ticker = cli_news
+            elif cli_options := self.cli_overrides.get('options'):
+                start_category = 'options'
+                if isinstance(cli_options, str): self.options_ticker = cli_options
             elif self.cli_overrides.get('debug'):
                 start_category = 'debug'
             elif self.cli_overrides.get('configs'):

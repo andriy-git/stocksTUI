@@ -82,6 +82,14 @@ def create_arg_parser() -> argparse.ArgumentParser:
         help="Start on the News tab. Optionally provide one or more\ncomma-separated tickers (e.g., \"AAPL,MSFT\")."
     )
     view_group.add_argument(
+        '-O', '--options',
+        nargs='?',
+        const=True,
+        default=None,
+        metavar='TICKER',
+        help="Start on the Options tab. Optionally provide a ticker."
+    )
+    view_group.add_argument(
         '--debug',
         action='store_true',
         help="Start on the Debug tab."

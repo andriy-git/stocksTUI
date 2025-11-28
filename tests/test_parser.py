@@ -44,6 +44,14 @@ class TestArgParser(unittest.TestCase):
         args = self.parser.parse_args(['-H', 'TSLA'])
         self.assertEqual(args.history, 'TSLA')
         
+        # Test --options without ticker
+        args = self.parser.parse_args(['--options'])
+        self.assertTrue(args.options)
+        
+        # Test --options with ticker
+        args = self.parser.parse_args(['-O', 'V'])
+        self.assertEqual(args.options, 'V')
+        
         # Test --debug and --configs
         args = self.parser.parse_args(['--debug'])
         self.assertTrue(args.debug)
