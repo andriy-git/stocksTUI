@@ -41,6 +41,10 @@ OPTIONS
         provided, a combined news feed for those symbols will be loaded.
         If omitted, the view will be empty.
 
+    -O, --options [TICKER]
+        Start on the Options tab. If TICKER is provided, options data for
+        that symbol will be loaded. If omitted, the view will be empty.
+
     --debug
         Start on the Debug tab, which provides tools for testing API latency
         and cache performance.
@@ -122,7 +126,7 @@ CONFIGURATION
 
     - `app_cache.db`: A SQLite database used to cache price and ticker metadata.
     - `stockstui.log`: A debug log file.
-    
+
     These files can be safely deleted to reset caches or configuration.
 
 NOTES
