@@ -17,6 +17,28 @@ async def create_test_app() -> StocksTUI:
     """
     Creates a fully mocked, composed instance of the StocksTUI app for testing.
     """
+    app = create_mocked_app()
+    
+    app._loop = asyncio.get_running_loop()
+    app._thread_id = threading.get_ident()
+    
+    with app._context():
+        screen = app.get_default_screen()
+        app.install_screen(screen, "_default")
+        await app.push_screen("_default")
+        
+    app.mount()
+    await app.workers.wait_for_complete()
+    await asyncio.sleep(0.01)
+    app.push_screen = MagicMock()
+    
+    return app
+
+def create_mocked_app() -> StocksTUI:
+    """
+    Creates a StocksTUI app with mocks but does NOT mount it.
+    Suitable for use with app.run_test().
+    """
     app = StocksTUI()
 
     # Replace core components with mocks
@@ -30,21 +52,46 @@ async def create_test_app() -> StocksTUI:
     app.fetch_historical_data = MagicMock()
     
     # Test theme expectations: use gruvbox_soft_dark (as requested)
-    app.config.get_setting.return_value = "gruvbox_soft_dark"
+    def get_setting_side_effect(key, default=None):
+        if key == "theme":
+            return "gruvbox_soft_dark"
+        if key == "market_calendar":
+            return "NYSE"
+        return default
+        
+    app.config.get_setting.side_effect = get_setting_side_effect
     app.config.lists = {"stocks": [], "crypto": [], "news": [], "debug": []}
 
-    app._loop = asyncio.get_running_loop()
-    app._thread_id = threading.get_ident()
-    
-    with app._context():
-        screen = app.get_default_screen()
-        app.install_screen(screen, "_default")
-        await app.push_screen("_default")
-    
-    app.mount()
-    await app.workers.wait_for_complete()
-    await asyncio.sleep(0.01)
-    app.push_screen = MagicMock()
+    # Register a dummy theme to satisfy app requirements
+    from textual.theme import Theme
+    app.register_theme(Theme(
+        name="gruvbox_soft_dark",
+        primary="#d79921",
+        secondary="#458588",
+        background="#282828",
+        surface="#3c3836",
+        error="#cc241d",
+        warning="#d65d0e",
+        success="#98971a",
+        accent="#b16286",
+        dark=True,
+        variables={
+            "price": "cyan",
+            "latency-high": "red",
+            "latency-medium": "yellow",
+            "latency-low": "blue",
+            "text-muted": "#808080",
+            "status-open": "green",
+            "status-pre": "yellow",
+            "status-post": "yellow",
+            "status-closed": "red",
+            "button-foreground": "white",
+            "scrollbar": "black",
+            "scrollbar-hover": "#808080",
+        }
+    ))
+    # Mock _available_theme_names to include our dummy theme so on_mount doesn't try to reload
+    app._available_theme_names = ["gruvbox_soft_dark"]
     
     # Updated tab map to match actual app structure
     app.tab_map = [
@@ -56,7 +103,8 @@ async def create_test_app() -> StocksTUI:
         {'name': 'History', 'category': 'history'},
         {'name': 'Configs', 'category': 'configs'}
     ]
-    app._rebuild_app = MagicMock()
+    # Do not mock _rebuild_app so that tabs are actually created
+    # app._rebuild_app = MagicMock()
     
     return app
 

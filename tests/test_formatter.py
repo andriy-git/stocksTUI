@@ -1,11 +1,39 @@
 import unittest
 import pandas as pd
 from rich.text import Text
+from textual.app import App
 
 from stockstui.presentation import formatter
 
-class TestFormatter(unittest.TestCase):
+class TestFormatter(unittest.IsolatedAsyncioTestCase):
     """Unit tests for data formatting functions."""
+
+    async def test_format_historical_data_as_table(self):
+        """Test formatting historical data into a DataTable."""
+        # Daily data
+        dates_daily = pd.to_datetime(['2025-01-01', '2025-01-02'])
+        df_daily = pd.DataFrame({
+            'Open': [100.0, 101.0], 'High': [105.0, 106.0],
+            'Low': [99.0, 100.0], 'Close': [102.0, 103.0],
+            'Volume': [1000, 2000]
+        }, index=dates_daily)
+        
+        # We need an active app context for DataTable to measure columns
+        app = App()
+        async with app.run_test():
+            table_daily = formatter.format_historical_data_as_table(df_daily)
+            self.assertEqual(str(table_daily.columns['Date'].label), "Date")
+            
+            # Intraday data
+            dates_intraday = pd.to_datetime(['2025-01-01 10:00', '2025-01-01 11:00'])
+            df_intraday = pd.DataFrame({
+                'Open': [100.0, 101.0], 'High': [105.0, 106.0],
+                'Low': [99.0, 100.0], 'Close': [102.0, 103.0],
+                'Volume': [1000, 2000]
+            }, index=dates_intraday)
+            
+            table_intraday = formatter.format_historical_data_as_table(df_intraday)
+            self.assertEqual(str(table_intraday.columns['Date'].label), "Timestamp")
 
     def test_format_price_data_for_table(self):
         """Test the formatting of price data, including change calculation and aliasing."""
@@ -92,6 +120,55 @@ class TestFormatter(unittest.TestCase):
         # Test invalid input
         self.assertIsNone(formatter.format_market_status(None))
         self.assertIsNone(formatter.format_market_status("not a dict"))
+
+    def test_format_debug_tables(self):
+        """Test formatting for various debug data tables."""
+        # Ticker debug
+        ticker_data = [{'symbol': 'A', 'is_valid': True, 'description': 'Desc', 'latency': 0.1}]
+        rows_ticker = formatter.format_ticker_debug_data_for_table(ticker_data)
+        self.assertEqual(rows_ticker[0], ('A', True, 'Desc', 0.1))
+        
+        # List debug
+        list_data = [{'list_name': 'L1', 'ticker_count': 10, 'latency': 0.5}]
+        rows_list = formatter.format_list_debug_data_for_table(list_data)
+        self.assertEqual(rows_list[0], ('L1', 10, 0.5))
+        
+        # Cache test
+        cache_data = [{'list_name': 'C1', 'ticker_count': 5, 'latency': 0.2}]
+        rows_cache = formatter.format_cache_test_data_for_table(cache_data)
+        self.assertEqual(rows_cache[0], ('C1', 5, 0.2))
+
+    def test_format_info_comparison(self):
+        """Test comparing fast and slow info dictionaries."""
+        fast = {'a': 1, 'b': 2}
+        slow = {'a': 1, 'b': 3, 'c': 4}
+        
+        rows = formatter.format_info_comparison(fast, slow)
+        
+        # Expect 3 rows: a (match), b (mismatch), c (missing in fast)
+        self.assertEqual(len(rows), 3)
+        
+        # Check 'a' - match
+        row_a = next(r for r in rows if r[0] == 'a')
+        self.assertEqual(row_a, ('a', '1', '1', False))
+        
+        # Check 'b' - mismatch
+        row_b = next(r for r in rows if r[0] == 'b')
+        self.assertEqual(row_b, ('b', '2', '3', True))
+        
+        # Check 'c' - missing in fast
+        row_c = next(r for r in rows if r[0] == 'c')
+        self.assertEqual(row_c, ('c', 'N/A', '4', False))
+        
+        # Test error case
+        rows_err = formatter.format_info_comparison({}, {})
+        self.assertEqual(rows_err[0][0], "Error")
+
+    def test_escape(self):
+        """Test escaping special characters for Rich markdown."""
+        text = "Hello [World] *"
+        escaped = formatter.escape(text)
+        self.assertEqual(escaped, r"Hello \[World\] \*")
 
 if __name__ == '__main__':
     unittest.main()

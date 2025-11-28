@@ -2,8 +2,6 @@ import os
 import unittest
 from stockstui.data_providers import market_provider
 
-@unittest.skipUnless(os.environ.get("RUN_LIVE_TESTS") == "true", 
-                     "Live API tests are disabled. Set RUN_LIVE_TESTS=true to run.")
 class TestLiveApiIntegration(unittest.TestCase):
     """
     A suite of tests that make real network calls to the yfinance API.

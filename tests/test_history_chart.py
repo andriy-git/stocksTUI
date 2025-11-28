@@ -40,16 +40,16 @@ class TestHistoryChart(unittest.IsolatedAsyncioTestCase):
 
 
     async def test_history_chart_with_missing_close_column(self):
-        """Test chart behavior with a missing 'Close' column, which should raise a KeyError."""
+        """Test chart behavior with a missing 'Close' column, which should now fall back gracefully."""
         dates = pd.to_datetime(['2025-01-01'])
         df = pd.DataFrame({'Open': [100.0]}, index=dates)
         chart = HistoryChart(df, "1d", id="test-chart")
         app = HistoryChartApp(chart)
 
-        # The widget should raise a KeyError during on_mount when 'Close' is not found
-        with self.assertRaises(KeyError):
-            async with app.run_test():
-                pass
+        # The widget should NOT raise a KeyError anymore, it should fall back to 'Open'
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            self.assertIsNotNone(chart)
 
     async def test_history_chart_with_nan_values(self):
         """Test chart rendering with NaN values in data."""

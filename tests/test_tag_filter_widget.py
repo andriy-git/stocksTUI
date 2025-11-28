@@ -3,17 +3,25 @@ from unittest.mock import MagicMock
 
 from textual.app import App, ComposeResult
 from textual.containers import VerticalScroll
+from textual.widgets import Button
 
 from stockstui.ui.widgets.tag_filter import TagFilterWidget, TagFilterChanged
 
 class TagFilterApp(App):
     """A minimal app for testing the TagFilterWidget."""
+    CSS = """
+    TagFilterWidget {
+        height: auto;
+        width: 100%;
+        border: solid green;
+    }
+    """
     def __init__(self, widget_to_test):
         super().__init__()
         self.widget = widget_to_test
 
     def compose(self) -> ComposeResult:
-        yield VerticalScroll(self.widget)
+        yield self.widget
 
 class TestTagFilterWidget(unittest.IsolatedAsyncioTestCase):
     """Comprehensive tests for the TagFilterWidget."""
@@ -40,13 +48,6 @@ class TestTagFilterWidget(unittest.IsolatedAsyncioTestCase):
 
     async def test_tag_selection_and_message_emission(self):
         """Test that clicking tag buttons selects them and emits a message."""
-        # Skip this test due to layout issues with Textual Horizontal containers
-        # where buttons get positioned outside the visible screen region.
-        # This is a known issue that requires restructuring the widget layout.
-        self.skipTest("Layout issues with Textual Horizontal containers - buttons positioned off-screen")
-        
-        # Original test code kept for reference but commented out:
-        """
         tags = ["tech", "growth"]
         widget = TagFilterWidget(available_tags=tags, id="tag-filter")
         app = TagFilterApp(widget)
@@ -64,57 +65,35 @@ class TestTagFilterWidget(unittest.IsolatedAsyncioTestCase):
             return original_post_message(message)
         app.post_message = custom_post_message
 
-        async with app.run_test(size=(300, 40)) as pilot:
-            # Ensure widget is displayed and allow time for layout
-            widget.display = True
-            await pilot.pause(0.2)
+        async with app.run_test() as pilot:
+            # Clear initial messages from mount
+            messages.clear()
             
-            # Wait for the buttons to be rendered properly and ensure enough time for layout
-            await pilot.pause(0.2)
+            # Simulate click on tech button
+            tech_button = widget.query_one("#tag-button-tech")
+            event = Button.Pressed(tech_button)
+            widget.on_tag_button_pressed(event)
+            
+            # Wait for message to be processed
+            await pilot.pause(0.1)
 
-            # Verify buttons exist before clicking
-            try:
-                tech_button = widget.query_one("#tag-button-tech")
-                self.assertIsNotNone(tech_button)
-                
-                # Add some debugging information
-                print(f"Widget region: {widget.region}")
-                print(f"Widget size: {widget.size}")
-                print(f"Tech button region: {getattr(tech_button, 'region', 'No region')}")
-                print(f"Screen size: {pilot.app.size}")
-                
-                await pilot.click("#tag-button-tech")
-                await pilot.pause(0.2)  # Give more time for processing
+            self.assertEqual(len(messages), 1)
+            self.assertEqual(messages[0].tags, ["tech"])
+            self.assertEqual(widget.query_one("#tag-button-tech").variant, "primary")
 
-                self.assertEqual(len(messages), 1)
-                self.assertEqual(messages[0].tags, ["tech"])
-                self.assertTrue(widget.query_one("#tag-button-tech").has_class("-on"))
+            # Simulate click on growth button
+            growth_button = widget.query_one("#tag-button-growth")
+            event = Button.Pressed(growth_button)
+            widget.on_tag_button_pressed(event)
+            
+            await pilot.pause(0.1)
 
-                growth_button = widget.query_one("#tag-button-growth")
-                self.assertIsNotNone(growth_button)
-                
-                await pilot.click("#tag-button-growth")
-                await pilot.pause(0.2)  # Give more time for processing
-
-                # Check that the last message contains both tags
-                if messages:
-                    self.assertEqual(set(messages[-1].tags), {"tech", "growth"})
-            except Exception as e:
-                # Print diagnostic information to help debug visibility issues
-                print(f"Widget tree: {widget.tree}")
-                print(f"Screen size: {pilot.app.size}")
-                raise e
-        """
+            # Check that the last message contains both tags
+            if messages:
+                self.assertEqual(set(messages[-1].tags), {"tech", "growth"})
 
     async def test_tag_filter_clear_functionality(self):
         """Test that the clear button resets all selections."""
-        # Skip this test due to layout issues with Textual Horizontal containers
-        # where buttons get positioned outside the visible screen region.
-        # This is a known issue that requires restructuring the widget layout.
-        self.skipTest("Layout issues with Textual Horizontal containers - buttons positioned off-screen")
-        
-        # Original test code kept for reference but commented out:
-        """
         tags = ["tech", "growth", "value"]
         widget = TagFilterWidget(available_tags=tags, id="tag-filter")
         app = TagFilterApp(widget)
@@ -132,37 +111,25 @@ class TestTagFilterWidget(unittest.IsolatedAsyncioTestCase):
             return original_post_message(message)
         app.post_message = custom_post_message
 
-        async with app.run_test(size=(300, 40)) as pilot:
-            # Ensure widget is displayed and allow time for layout
-            widget.display = True
-            await pilot.pause(0.2)
+        async with app.run_test() as pilot:
+            # Clear initial messages from mount
+            messages.clear()
             
-            # Wait for the buttons to be rendered properly
-            await pilot.pause(0.2)
+            # Select a tag directly
+            tech_button = widget.query_one("#tag-button-tech")
+            event = Button.Pressed(tech_button)
+            widget.on_tag_button_pressed(event)
+            await pilot.pause(0.1)
+            
+            if messages:
+                self.assertEqual(messages[-1].tags, ["tech"])
 
-            # Verify buttons exist before clicking
-            try:
-                tech_button = widget.query_one("#tag-button-tech")
-                clear_button = widget.query_one("#clear-filter-button")
-                self.assertIsNotNone(tech_button)
-                self.assertIsNotNone(clear_button)
-                
-                # Select a tag
-                await pilot.click("#tag-button-tech")
-                await pilot.pause(0.2)  # Give more time for processing
-                if messages:  # Make sure we have messages before accessing the last one
-                    self.assertEqual(messages[-1].tags, ["tech"])
+            # Clear the filter directly
+            clear_button = widget.query_one("#clear-filter-button")
+            event_clear = Button.Pressed(clear_button)
+            widget.on_clear_button_pressed(event_clear)
+            await pilot.pause(0.1)
 
-                # Clear the filter
-                await pilot.click("#clear-filter-button")
-                await pilot.pause(0.2)  # Give more time for processing
-
-                if messages:  # Make sure we have messages before accessing the last one
-                    self.assertEqual(messages[-1].tags, [])
-                self.assertFalse(widget.query_one("#tag-button-tech").has_class("-on"))
-            except Exception as e:
-                # Print diagnostic information to help debug visibility issues
-                print(f"Widget tree: {widget.tree}")
-                print(f"Screen size: {pilot.app.size}")
-                raise e
-        """
+            if messages:
+                self.assertEqual(messages[-1].tags, [])
+            self.assertEqual(widget.query_one("#tag-button-tech").variant, "default")
