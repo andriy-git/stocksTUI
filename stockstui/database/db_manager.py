@@ -63,6 +63,15 @@ class DbManager:
                     timestamp REAL NOT NULL
                 )
             """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS option_positions (
+                    symbol TEXT PRIMARY KEY,
+                    ticker TEXT NOT NULL,
+                    quantity REAL NOT NULL,
+                    avg_cost REAL,
+                    timestamp REAL NOT NULL
+                )
+            """)
             self.conn.commit()
         except sqlite3.Error as e:
             logging.error(f"Failed to create database tables: {e}")
@@ -173,6 +182,73 @@ class DbManager:
         except sqlite3.Error as e:
             logging.error(f"Failed to save info cache to database: {e}")
             self.conn.rollback()
+
+    # --- Option Positions Methods ---
+
+    def save_option_position(self, symbol: str, ticker: str, quantity: float, avg_cost: float):
+        """Saves or updates an option position."""
+        if not self.conn: return
+        try:
+            cursor = self.conn.cursor()
+            timestamp = datetime.now(timezone.utc).timestamp()
+            cursor.execute("""
+                INSERT OR REPLACE INTO option_positions (symbol, ticker, quantity, avg_cost, timestamp)
+                VALUES (?, ?, ?, ?, ?)
+            """, (symbol, ticker, quantity, avg_cost, timestamp))
+            self.conn.commit()
+            logging.info(f"Saved option position: {symbol}")
+        except sqlite3.Error as e:
+            logging.error(f"Failed to save option position {symbol}: {e}")
+
+    def get_option_position(self, symbol: str) -> dict | None:
+        """Retrieves a specific option position."""
+        if not self.conn: return None
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("SELECT symbol, ticker, quantity, avg_cost FROM option_positions WHERE symbol = ?", (symbol,))
+            row = cursor.fetchone()
+            if row:
+                return {
+                    'symbol': row[0],
+                    'ticker': row[1],
+                    'quantity': row[2],
+                    'avg_cost': row[3]
+                }
+            return None
+        except sqlite3.Error as e:
+            logging.error(f"Failed to get option position {symbol}: {e}")
+            return None
+
+    def delete_option_position(self, symbol: str):
+        """Deletes an option position."""
+        if not self.conn: return
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("DELETE FROM option_positions WHERE symbol = ?", (symbol,))
+            self.conn.commit()
+            logging.info(f"Deleted option position: {symbol}")
+        except sqlite3.Error as e:
+            logging.error(f"Failed to delete option position {symbol}: {e}")
+
+    def get_all_option_positions(self) -> dict:
+        """Retrieves all option positions, keyed by symbol."""
+        if not self.conn: return {}
+        positions = {}
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("SELECT symbol, ticker, quantity, avg_cost FROM option_positions")
+            rows = cursor.fetchall()
+            for row in rows:
+                positions[row[0]] = {
+                    'symbol': row[0],
+                    'ticker': row[1],
+                    'quantity': row[2],
+                    'avg_cost': row[3]
+                }
+            return positions
+        except sqlite3.Error as e:
+            logging.error(f"Failed to get all option positions: {e}")
+            return {}
 
     def close(self):
         """Closes the database connection if it's open."""
