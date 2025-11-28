@@ -1,4 +1,49 @@
 # Change Log
+## [0.1.0-b8] 2025-11-28
+
+### Added
+-   `feat(options)`: Added comprehensive options chain functionality with expiration date selection and call/put tables
+-   `feat(options)`: Implemented options Greeks calculation (Delta, Gamma, Theta, Vega) using Black-Scholes model
+-   `feat(options)`: Added option position tracking with quantity and average cost management
+-   `feat(options)`: Created interactive Open Interest bar chart visualization for calls and puts
+-   `feat(ui)`: Introduced 'Open Mode' allowing users to quickly navigate from price tables to news, history, or options views using `o`, `n`, `h` keys
+-   `feat(ui)`: Added quick edit modal for ticker aliases, notes, and tags accessible with `e` key in price tables
+-   `feat(ui)`: Added position management modal for options with quantity and cost tracking
+-   `feat(ui)`: Implemented toggle between table and chart views in options view
+-   `feat(ui)`: Added keyboard shortcuts for navigating expiration dates (`[` and `]`) in options view
+-   `feat(ui)`: Created new 'options' tab in main application with dedicated UI components
+-   `feat(data)`: Added options data provider with caching mechanism and yfinance integration
+-   `feat(db)`: Added option_positions table to SQLite database with CRUD operations
+-   `feat(core)`: Added Black-Scholes options pricing model implementation for Greeks calculation
+-   `feat(core)`: Added new OptionsDataUpdated and OptionsExpirationsUpdated message types
+-   `feat(ui)`: Added OIChart widget for visualizing open interest by strike price
+-   `feat(test)`: Added comprehensive test coverage for options functionality including provider, UI, and position management
+
+### Changed
+-   `refactor(ui)`: Updated HistoryChart widget to gracefully handle missing 'Close' column by falling back to 'Open' or first numeric column
+-   `refactor(data)`: Enhanced market status provider to handle different HolidayCalendar API versions
+-   `refactor(ui)`: Updated NewsView component to include required Markdown component classes for proper styling
+-   `refactor(ui)`: Modified main application to support options view integration with proper data flow and category handling
+-   `refactor(core)`: Improved error handling in options data fetching with better error messaging
+-   `refactor(test)`: Updated format_historical_data_as_table to include app context for proper DataTable measurement
+-   `refactor(ui)`: Added Enter key binding to Tabs component for focusing primary view widgets
+
+### Fixed
+-   `fix(data)`: Fixed holiday detection in market status provider for different pandas_market_calendars API versions
+-   `fix(ui)`: Fixed HistoryChart rendering when data contains only a single point to avoid division by zero errors
+-   `fix(ui)`: Improved handling of NaN values in historical data for chart rendering
+-   `fix(ui)`: Fixed escape sequence handling in formatter module for special markdown characters
+
+### Test
+-   `test(formatter)`: Added tests for historical data formatting with both daily and intraday data
+-   `test(formatter)`: Added tests for debug table formatting functions and info comparison utilities
+-   `test(formatter)`: Added tests for escaping special characters in markdown text
+-   `test(history-chart)`: Updated tests to reflect graceful handling of missing 'Close' column in data
+-   `test(black-scholes)`: Added comprehensive test coverage for Black-Scholes Greeks calculations
+-   `test(options-provider)`: Added test suite for options provider functionality
+-   `test(options-view)`: Added test coverage for options view components
+-   `test(position-manager)`: Added tests for option position management features
+
 ## [0.1.0-b7] 2025-11-23
 
 ### Added
@@ -155,7 +200,7 @@ A special thanks to contributor **[@klahrich](https://github.com/klahrich)** for
 
 -   `feat(ui)`: Show specific feedback for invalid tickers and data fetching failures in the history and news views.
 -   `feat(news)`: Notify the user when attempting to open an external link.
-  
+
 ### Fixed
 
 -   `fix(config)`: Use atomic writes for config files to prevent data loss.
