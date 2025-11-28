@@ -236,9 +236,12 @@ def get_market_status(calendar_name='NYSE') -> dict:
             else:
                 holidays_obj = cal.holidays()
                 today_date = pd.Timestamp(now.date())
-                if today_date in holidays_obj.holidays.index:
-                    result['reason'] = 'holiday'
-                    result['holiday'] = holidays_obj.holidays.loc[today_date]
+                if hasattr(holidays_obj, 'holidays'):
+                    holiday_list = holidays_obj.holidays() if callable(holidays_obj.holidays) else holidays_obj.holidays
+                    if today_date in holiday_list:
+                        result['reason'] = 'holiday'
+                        if hasattr(holiday_list, 'loc'):
+                            result['holiday'] = holiday_list.loc[today_date]
 
         return result
     except Exception as e:
