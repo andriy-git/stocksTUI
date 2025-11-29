@@ -1,4 +1,10 @@
 # Change Log
+## [0.1.0-b9] 2025-11-29
+
+### Changed
+-   `chore(deps)`: Migrated from Textual 3.5.0 to 5.3.0 to fix Python 3.12 compatibility issues
+-   `chore(deps)`: Updated requirements.txt to align with pyproject.toml Textual version
+
 ## [0.1.0-b8] 2025-11-28
 
 ### Added
