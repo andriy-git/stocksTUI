@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "stocksTUI"
-version = "0.1.0-b8"
+version = "0.1.0-b9"
 authors = [
   { name="Andriy", email="project-git@techie.com" },
 ]
@@ -31,7 +31,7 @@ classifiers = [
 keywords = ["tui", "stocks", "finance", "terminal", "textual", "yfinance"]
 
 dependencies = [
-    "textual~=3.5.0",
+    "textual~=5.3.0",
     "yfinance>=0.2.65",
     "pandas_market_calendars~=5.1.1",
     "plotext~=5.3.2",

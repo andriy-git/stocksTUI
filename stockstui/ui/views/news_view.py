@@ -20,32 +20,6 @@ class NewsView(Vertical):
         Binding("enter", "open_link", "Open Link", show=False),
     ]
 
-    # Required component classes for the Markdown widget
-    COMPONENT_CLASSES = {
-        "markdown--h1",
-        "markdown--h2", 
-        "markdown--h3",
-        "markdown--h4",
-        "markdown--h5",
-        "markdown--h6",
-        "markdown--link",
-        "markdown--link-hover",
-        "markdown--code-inline",
-        "markdown--code-block",
-        "markdown--em",
-        "markdown--strong",
-        "markdown--s",
-        "markdown--hr",
-        "markdown--blockquote",
-        "markdown--table",
-        "markdown--thead",
-        "markdown--tfoot",
-        "markdown--tbody",
-        "markdown--th",
-        "markdown--td",
-        "markdown--tr",
-    }
-
     def __init__(self, **kwargs):
         """Initializes the NewsView, setting up internal state for link management."""
         super().__init__(**kwargs)

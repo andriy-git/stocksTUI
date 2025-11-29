@@ -374,7 +374,7 @@ DataTable>Header {
 }
 
 /* Style the source ticker in the news view */
-Markdown .strong>.code {
+MarkdownBlock .strong>.code {
   color: $secondary;
   text-style: bold;
   /* Ensure it remains bold */
