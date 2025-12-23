@@ -1,5 +1,5 @@
 from textual.message import Message
-from textual.containers import Horizontal, Container, Vertical
+from textual.containers import Horizontal, Container, Vertical, VerticalScroll, Grid
 from textual.widgets import Button, Label, Static
 from textual.widget import Widget
 from textual.app import ComposeResult
@@ -24,10 +24,11 @@ class TagFilterWidget(Widget):
         if self.available_tags:
             with Horizontal(id="tag-filter-controls"):
                 yield Static("Filter by:", classes="tag-filter-label")
-                # Container for the tag buttons that will allow wrapping
-                with Container(classes="tag-buttons-container"):
-                    for tag in self.available_tags:
-                        yield Button(tag, id=f"tag-button-{tag}", classes="tag-button")
+                # Use VerticalScroll with a Grid inside for proper scrolling
+                with VerticalScroll(classes="tag-buttons-scroll"):
+                    with Grid(classes="tag-buttons-container"):
+                        for tag in self.available_tags:
+                            yield Button(tag, id=f"tag-button-{tag}", classes="tag-button")
                 yield Button("Clear", id="clear-filter-button", variant="default")
         yield Label("Filter status", id="filter-status")
 
@@ -75,6 +76,81 @@ class TagFilterWidget(Widget):
                 status_label.update("")
         except NoMatches:
             pass
+
+    def on_key(self, event) -> None:
+        """Handle 2D keyboard navigation for tag filter buttons."""
+        if not isinstance(self.app.focused, Button):
+            return
+        
+        # Horizontal navigation (sequential)
+        if event.key in ("h", "left"):
+            self.screen.focus_previous()
+            event.stop()
+        elif event.key in ("l", "right"):
+            self.screen.focus_next()
+            event.stop()
+        # Vertical navigation (find button in same column position)
+        elif event.key in ("j", "down", "k", "up"):
+            self._navigate_vertical(direction="down" if event.key in ("j", "down") else "up")
+            event.stop()
+
+    def _navigate_vertical(self, direction: str) -> None:
+        """Navigate to a button in the row above/below at approximately the same horizontal position."""
+        try:
+            focused = self.app.focused
+            if not focused:
+                return
+            
+            # Get all buttons and their positions
+            all_buttons = list(self.query(Button))
+            if not all_buttons:
+                return
+            
+            # Group buttons by their y-coordinate (row)
+            rows = {}
+            for btn in all_buttons:
+                y = btn.region.y
+                if y not in rows:
+                    rows[y] = []
+                rows[y].append(btn)
+            
+            # Sort rows by y-coordinate
+            sorted_row_keys = sorted(rows.keys())
+            
+            # Find which row the focused button is in
+            focused_y = focused.region.y
+            focused_x = focused.region.x
+            
+            try:
+                current_row_idx = sorted_row_keys.index(focused_y)
+            except ValueError:
+                return
+            
+            # Determine target row
+            if direction == "down":
+                target_row_idx = current_row_idx + 1
+            else:  # up
+                target_row_idx = current_row_idx - 1
+            
+            # Wrap around if at edge
+            if target_row_idx >= len(sorted_row_keys):
+                target_row_idx = 0
+            elif target_row_idx < 0:
+                target_row_idx = len(sorted_row_keys) - 1
+            
+            target_row_y = sorted_row_keys[target_row_idx]
+            target_row_buttons = rows[target_row_y]
+            
+            # Find button in target row closest to current x position
+            closest_btn = min(target_row_buttons, key=lambda b: abs(b.region.x - focused_x))
+            closest_btn.focus()
+            
+        except Exception:
+            # Fallback to sequential navigation if grid logic fails
+            if direction == "down":
+                self.screen.focus_next()
+            else:
+                self.screen.focus_previous()
 
 class TagFilterChanged(Message):
     """Message posted when tag filter changes."""
