@@ -446,16 +446,23 @@ Footer {
   content-align: center middle;
 }
 
-.tag-buttons-container {
-  layout: grid;
-  grid-size: 5 2;
+.tag-buttons-scroll {
   width: 1fr;
   height: 8;
+  /* VerticalScroll handles scrolling natively */
+}
+
+.tag-buttons-container {
+  layout: grid;
+  grid-size: 5;
+  width: 1fr;
+  height: auto;
 }
 
 .tag-button {
   width: 1fr;
   height: 4;
+  min-height: 4;
   margin: 0 1 1 0;
   min-width: 12;
   padding: 0 2;
@@ -575,13 +582,14 @@ Footer {
 }
 
 /* Make the sections (Vertical containers holding label + table) take full space */
-#options-tables-view > Vertical {
+#options-tables-view>Vertical {
   width: 1fr;
   height: 1fr;
   padding: 0 1;
 }
 
-#options-calls-table, #options-puts-table {
+#options-calls-table,
+#options-puts-table {
   height: 1fr;
   width: 1fr;
 }
