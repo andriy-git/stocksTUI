@@ -63,6 +63,14 @@
         {
             "key": "Beta",
             "visible": false
+        },
+        {
+            "key": "All Time High",
+            "visible": false
+        },
+        {
+            "key": "% Off ATH",
+            "visible": false
         }
     ]
 }
