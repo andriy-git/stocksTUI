@@ -3,11 +3,17 @@ from textual.widgets import (Button, Checkbox, Input, Label,
                              Select, Switch, ListView, ListItem)
 from textual.app import ComposeResult, on
 from textual.validation import Number
+from textual.binding import Binding
 
 from stockstui.common import NotEmpty
 
 class GeneralConfigView(Vertical):
     """A view for configuring general application settings and tab visibility."""
+
+    BINDINGS = [
+        Binding("j, down", "focus_next", "Next", show=False),
+        Binding("k, up", "focus_previous", "Previous", show=False),
+    ]
 
     def compose(self) -> ComposeResult:
         """Creates the layout for the general configuration view."""
