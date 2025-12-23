@@ -43,7 +43,7 @@ class TestAppOpenMode(unittest.IsolatedAsyncioTestCase):
         # Verify
         self.assertTrue(self.app._open_mode)
         mock_status_label.update.assert_called_once_with(
-            "OPEN IN: \\[n]ews, \\[h]istory, \\[o]ptions, \\[ESC]ape"
+            'OPEN IN: \\[n]ews, \\[h]istory, \\[o]ptions, \\[y]ahoo Finance, \\[ESC]ape'
         )
         self.assertEqual(self.app._original_status_text, "Original status")
 
