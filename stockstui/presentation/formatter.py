@@ -57,30 +57,21 @@ def format_price_data_for_table(data: list[dict], old_prices: dict, alias_map: d
 
         prev_close_str = f"${previous_close:,.2f}" if previous_close is not None else "N/A"
 
+        all_time_high = item.get('all_time_high')
+        pct_off_ath = None
+        if price is not None and all_time_high is not None and all_time_high != 0:
+            pct_off_ath = (price / all_time_high) - 1
+
         # Return a dictionary so columns can be selected dynamically
         rows.append({
             "Description": description,
-            "Price": price, # Keep raw for sorting/formatting later if needed, or format here? 
-                            # The original code returned raw price in the tuple, but formatted it inside the loop.
-                            # Wait, the original code returned a tuple of *formatted* strings (mostly).
-                            # Let's look at the original code again.
-                            # Original: 
-                            # rows.append((description, price, change, change_percent, day_range_str, fifty_two_week_range_str, symbol, change_direction))
-                            # And then _style_and_populate_price_table did the formatting for Price/Change.
-                            # I should probably keep providing raw values where _style_and_populate_price_table expects them, 
-                            # OR move all formatting here.
-                            # _style_and_populate_price_table applies colors. 
-                            # So I should provide the raw values for Price/Change so they can be colored.
-                            # For the new columns (Volume, Open, Prev Close), I can provide formatted strings or raw values.
-                            # Let's provide raw values where possible to allow for potential future styling, 
-                            # but for now I'll just provide the values needed.
-            
+            "Price": price, 
             "Change": change,
             "% Change": change_percent,
             "Day's Range": day_range_str,
             "52-Wk Range": fifty_two_week_range_str,
             "Ticker": symbol,
-            "Volume": volume_str, # No special coloring needed yet
+            "Volume": volume_str,
             "Open": open_str,
             "Prev Close": prev_close_str,
             "PE Ratio": f"{item.get('pe_ratio', 0):.2f}" if item.get('pe_ratio') else "N/A",
@@ -88,6 +79,8 @@ def format_price_data_for_table(data: list[dict], old_prices: dict, alias_map: d
             "Div Yield": f"{item.get('dividend_yield', 0):.2f}%" if item.get('dividend_yield') else "N/A",
             "EPS": f"{item.get('eps', 0):.2f}" if item.get('eps') else "N/A",
             "Beta": f"{item.get('beta', 0):.2f}" if item.get('beta') else "N/A",
+            "All Time High": all_time_high,
+            "% Off ATH": pct_off_ath,
             "_change_direction": change_direction, # Internal use
             "_raw_price": price, # For sorting if needed, though Price is used for display
             "_raw_change": change,
@@ -273,51 +266,96 @@ def format_market_status(market_status: dict | None) -> tuple | None:
         return None
 
     calendar = market_status.get('calendar', 'Market')
-    status = market_status.get('status', 'closed')
-    reason = market_status.get('reason')
+    status_code = market_status.get('status', 'closed')
+    reason_code = market_status.get('reason')
     holiday = market_status.get('holiday')
     next_open = market_status.get('next_open')
     next_close = market_status.get('next_close')
+    is_open = market_status.get('is_open', False)
     
     # Default to system's local timezone if gettz() returns None
     local_tz = gettz() or datetime.now().astimezone().tzinfo
 
+    # 1. Exchange
     text = f"{calendar}: "
-    status_color = "dim"
+    
+    # 2. Main Status (Open vs Closed) + Reason (Pre/Post/Weekend/Holiday)
+    # The display logic constructs a 3-part status:
+    #   [Main Status] [Reason] [Next Event]
+    #
+    # logic:
+    # - Main Status: Explicitly "Open" or "Closed".
+    # - Reason: Provides context for the "Closed" state (e.g., Pre-Market, Weekend).
+    #           We treat Pre/Post market as "Closed" for the main status color (Red)
+    #           but highlight the reason (Yellow) to distinguish it from a hard close.
+    
+    # Define Styles
     status_map = {
-        "open": ("Open", "status-open"),
-        "pre": ("Pre-Market", "status-pre"),
-        "post": ("After Hours", "status-post"),
-        "closed": ("Closed", "status-closed"),
-        "unknown": ("Unknown", "text-muted"),
+        "open": "status-open",
+        "pre": "status-pre",
+        "post": "status-post",
+        "closed": "status-closed",
+        "unknown": "text-muted",
     }
     
-    status_display, status_color_var = status_map.get(status, ("Unknown", "text-muted"))
+    # Determine Primary Display "Open" or "Closed"
+    if status_code == 'open':
+        main_status = "Open"
+        style_var = status_map['open']
+        reason_display = "" # No reason needed for standard open state
+    elif status_code == 'pre':
+        main_status = "Closed"
+        style_var = status_map['closed'] 
+        # Highlight Pre-Market activity distinct from the main closed status
+        reason_display = "(Pre-Market)"
+    elif status_code == 'post':
+        main_status = "Closed"
+        style_var = status_map['closed']
+        # Highlight Post-Market activity distinct from the main closed status
+        reason_display = "(Post Market)"
+    else: # closed or unknown
+        main_status = "Closed"
+        style_var = status_map['closed']
+        reason_display = ""
+        if reason_code == 'weekend':
+            reason_display = "(Weekend)"
+        elif reason_code == 'holiday':
+            holiday_str = holiday[:15] + '...' if holiday and len(holiday) > 15 else (holiday or "Holiday")
+            reason_display = f"(Holiday: {holiday_str})"
     
-    if status == 'open' and next_close:
-        close_local = next_close.astimezone(local_tz)
-        time_str = f"({close_local:%H:%M})"
-        text_parts = [(f"{status_display} ", status_color_var), (time_str, "text-muted")]
-    elif status in ('pre', 'post') and next_close:
-        close_local = next_close.astimezone(local_tz)
-        time_str = f"(ends {close_local:%H:%M})"
-        text_parts = [(f"{status_display} ", status_color_var), (time_str, "text-muted")]
-    elif status == 'closed' and next_open:
-        open_local = next_open.astimezone(local_tz)
-        time_str = f"({open_local:%a %H:%M})"
-        reason_str = ""
-        if reason == 'weekend':
-            reason_str = " (Weekend)"
-        elif reason == 'holiday' and holiday:
-            holiday_str = holiday[:15] + '...' if len(holiday) > 15 else holiday
-            reason_str = f" (Holiday: {holiday_str})"
+    text_parts = [(f"{main_status} ", style_var)]
+    
+    if reason_display:
+        # Style the reason. 
+        # Use specific status color for Pre/Post reasons to make them visually distinct.
+        reason_style = "text-muted"
+        if status_code == 'pre': reason_style = status_map['pre']
+        elif status_code == 'post': reason_style = status_map['post']
         
-        text_parts = [
-            (f"{status_display}", status_color_var),
-            (f"{reason_str} ", "text-muted"),
-            (time_str, "text-muted")
-        ]
+        text_parts.append((f"{reason_display} ", reason_style))
+        
+    # 3. Next Event
+    # Displays when the current state ends or the next trading session begins.
+    next_event_str = ""
+    if is_open:
+        # ASSUMPTION: 'is_open' is True only for REGULAR trading hours.
+        # If open, relevant info is when it closes today.
+        if next_close:
+            close_local = next_close.astimezone(local_tz)
+            next_event_str = f"(Closes {close_local:%H:%M})"
+            
     else:
-        text_parts = [(status_display, status_color_var)]
+        # If closed (including Pre/Post), the most relevant info is the next Open time.
+        if next_open:
+            open_local = next_open.astimezone(local_tz)
+            # Logic: If next open is today, omit the date. Otherwise include Day abbreviation.
+            now = datetime.now(local_tz)
+            if open_local.date() == now.date():
+                 next_event_str = f"(Opens {open_local:%H:%M})"
+            else:
+                 next_event_str = f"(Opens {open_local:%a %H:%M})"
+    
+    if next_event_str:
+        text_parts.append((next_event_str, "text-muted"))
 
     return (text, text_parts)
