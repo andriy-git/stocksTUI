@@ -9,8 +9,25 @@ if TYPE_CHECKING:
     from stockstui.ui.views.config_view import ConfigContainer
 
 
+from textual.binding import Binding
+
 class MainConfigView(Static):
     """The main hub screen for the configuration tab."""
+
+    def on_key(self, event) -> None:
+        """Handle keyboard navigation between main config buttons."""
+        if event.key in ("j", "down", "k", "up"):
+            focused = self.app.focused
+            if isinstance(focused, Button):
+                 # Find all buttons in order
+                buttons = list(self.query("Button"))
+                if focused in buttons:
+                    idx = buttons.index(focused)
+                    direction = 1 if event.key in ("j", "down") else -1
+                    new_idx = (idx + direction) % len(buttons)
+                    buttons[new_idx].focus()
+                    event.stop()
+                    return
 
     def compose(self) -> ComposeResult:
         """Creates the layout for the main config view."""
