@@ -4,8 +4,15 @@
 from textual.app import ComposeResult
 from textual.widgets import Label, Static
 
+from textual.binding import Binding
+
 class PortfolioConfigView(Static):
     """A view for managing portfolios."""
+
+    BINDINGS = [
+        Binding("j, down", "focus_next", "Next", show=False),
+        Binding("k, up", "focus_previous", "Previous", show=False),
+    ]
 
     def compose(self) -> ComposeResult:
         """Creates the layout for the portfolio config view."""
