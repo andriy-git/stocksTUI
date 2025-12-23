@@ -73,10 +73,19 @@ class DebugView(Vertical):
                 dt.add_columns("List Name", "Tickers", "Latency")
                 dt.add_row("[yellow]Running list batch network test...[/]")
                 lists_to_test = {name: [s['ticker'] for s in tickers] for name, tickers in self.app.config.lists.items()}
-                # FIX: Call the correct test function for network latency.
                 self.app.run_list_debug_test(lists_to_test)
             elif button_id == "debug-test-cache":
                 dt.add_columns("List Name", "Tickers", "Latency (From Cache)")
                 dt.add_row("[yellow]Running cache speed test...[/]")
                 lists_to_test = {name: [s['ticker'] for s in tickers] for name, tickers in self.app.config.lists.items()}
                 self.app.run_cache_test(lists_to_test)
+
+    def on_key(self, event) -> None:
+        """Handle keyboard navigation for debug buttons."""
+        if not isinstance(self.app.focused, Button):
+            return
+
+        if event.key in ("h", "left"):
+            self.screen.focus_previous()
+        elif event.key in ("l", "right"):
+            self.screen.focus_next()
