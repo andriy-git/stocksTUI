@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import patch, MagicMock
 from datetime import datetime, timezone, timedelta
 import pandas as pd
+import pytz
 
 from stockstui.data_providers import market_provider
 
@@ -15,6 +16,7 @@ class TestMarketProvider(unittest.TestCase):
         market_provider._price_cache.clear()
         market_provider._info_cache.clear()
         market_provider._news_cache.clear()
+        market_provider._market_calendars.clear()
 
     @patch('stockstui.data_providers.market_provider.yf.Tickers')
     def test_get_market_price_data_fetches_uncached(self, mock_yf_tickers):
@@ -140,3 +142,60 @@ class TestMarketProvider(unittest.TestCase):
         # 5. --- Assert the correct behavior ---
         self.assertEqual(mock_yf_tickers.call_count, 4, "The API was not called again on the new day; the stale cache was used.")
         self.assertEqual(market_provider._price_cache['AAPL']['data']['previous_close'], 105.0)
+
+    def test_unknown_exchange_status(self):
+        """Test that unknown exchanges default to appropriate fallback status."""
+        unknown_exchange = "UNKNOWN_EXCHANGE"
+        status = market_provider.get_market_status(unknown_exchange)
+        self.assertEqual(status['calendar'], unknown_exchange)
+        # Unknown exchanges default to Open/True in fallback
+        self.assertTrue(status['is_open'], "Unknown exchange should default to Open (fallback behavior)")
+
+    @patch('stockstui.data_providers.market_provider.yf.Ticker')
+    @patch('stockstui.data_providers.market_provider.pd')
+    @patch('stockstui.data_providers.market_provider.mcal')
+    def test_gspc_exchange_mapping(self, mock_mcal, mock_pd, mock_ticker):
+        """Test correct mapping of SNP/GSPC to NYSE and status check."""
+        import logging
+        logging.basicConfig(level=logging.ERROR)
+        import pandas as real_pd
+        
+        # Configure mock_pd to use real pandas classes
+        mock_pd.Timedelta = real_pd.Timedelta
+        mock_pd.DataFrame = real_pd.DataFrame
+        
+        # Mock Timestamp.now to return 02:00 AM ET (Closed)
+        mock_now = real_pd.Timestamp("2025-12-11 02:00:00-05:00")
+        
+        # We need mock_pd.Timestamp to maintain the Mock structure for .now() patching
+        # But allow constructor calls to pass through to real Timestamp
+        mock_pd.Timestamp.now.side_effect = lambda tz=None: mock_now.astimezone(tz) if tz else mock_now
+        
+        mock_instance = mock_ticker.return_value
+        mock_instance.info = {'exchange': 'SNP', 'currency': 'USD'}
+        mock_pd.Timestamp.side_effect = lambda *args, **kwargs: real_pd.Timestamp(*args, **kwargs)
+        
+        # Setup mock calendar
+        mock_cal = MagicMock()
+        mock_cal.tz = pytz.timezone('America/New_York')
+        mock_mcal.get_calendar.return_value = mock_cal
+        
+        # Setup mock schedule with valid data to prevent 'RangeIndex' errors
+        # Create a schedule that indicates market is CLOSED at 2 AM
+        # But has valid open/close times for the day
+        schedule_df = pd.DataFrame({
+            'market_open': [pd.Timestamp("2025-12-11 09:30:00-05:00")],
+            'market_close': [pd.Timestamp("2025-12-11 16:00:00-05:00")]
+        }, index=pd.DatetimeIndex([pd.Timestamp("2025-12-11")]))
+        mock_cal.schedule.return_value = schedule_df
+        
+        info = market_provider.get_ticker_info("^GSPC")
+        exchange = info.get('exchange')
+        
+        status = market_provider.get_market_status(exchange)
+        
+        # VERIFY MAPPING: Ensure get_calendar was called with 'NYSE', not 'SNP'
+        mock_mcal.get_calendar.assert_called_with('NYSE')
+        
+        self.assertFalse(status['is_open'], f"Exchange {exchange} resulted in is_open=True")
+        self.assertEqual(status['status'], 'closed', "Should be closed at 2:00 AM")
