@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "stocksTUI"
-version = "0.1.0-b9"
+version = "0.1.0-b10"
 authors = [
   { name="Andriy", email="project-git@techie.com" },
 ]
