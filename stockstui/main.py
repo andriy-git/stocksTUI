@@ -10,6 +10,7 @@ import os
 import shutil
 import subprocess
 import argparse
+import webbrowser
 
 import yfinance as yf
 from rich.console import Console
@@ -141,12 +142,8 @@ class StocksTUI(App):
         Binding("e", "handle_sort_key('e')", "Sort by % Change", show=False),
         Binding("t", "handle_sort_key('t')", "Sort by Ticker", show=False),
         Binding("u", "handle_sort_key('u')", "Undo Sort", show=False),
-        Binding("o", "handle_sort_key('o')", "Sort by Open", show=False),
-        Binding("H", "handle_sort_key('H')", "Sort by High", show=False),
-        Binding("L", "handle_sort_key('L')", "Sort by Low", show=False),
         Binding("v", "handle_sort_key('v')", "Sort by Volume", show=False),
-        Binding("n", "handle_open_key('n')", "Open in News", show=False),
-        Binding("h", "handle_open_key('h')", "Open in History", show=False),
+        Binding("o", "handle_sort_key('o')", "Sort by Open", show=False),
         Binding("ctrl+c", "copy_text", "Copy", show=False),
         Binding("ctrl+C", "copy_text", "Copy", show=False),
         # FIX: Split the bindings. Escape has its own dedicated action.
@@ -346,10 +343,16 @@ class StocksTUI(App):
 
     #region Event Handlers & Actions
     @on(events.Key)
-    def on_key(self, event: events.Key) -> None:
+    async def on_key(self, event: events.Key) -> None:
         """Track the last key pressed for use in contextual actions."""
         # Update the last_key attribute on every key press.
         self.last_key = event
+        
+        # Contextual handling for Open Mode keys
+        # We removed global bindings for these to prevent conflicts (specifically 'h')
+        if self._open_mode and event.key in ("n", "h", "y"):
+            await self.action_handle_open_key(event.key)
+            event.stop()
 
     def action_dismiss_or_unfocus(self) -> None:
         """
@@ -825,9 +828,10 @@ class StocksTUI(App):
         """
         Handles unified hjkl/arrow key navigation.
         """
-        if self.focused and isinstance(self.focused, Tabs):
-            if direction == 'left': self.focused.action_previous_tab()
-            elif direction == 'right': self.focused.action_next_tab()
+        if self.focused and (isinstance(self.focused, Tabs) or isinstance(self.focused, Tab)):
+            tabs = self.focused if isinstance(self.focused, Tabs) else self.focused.query_ancestor(Tabs)
+            if direction == 'left': tabs.action_previous_tab()
+            elif direction == 'right': tabs.action_next_tab()
             return
 
         if self.focused and hasattr(self.focused, f"action_cursor_{direction}"):
@@ -1128,6 +1132,8 @@ class StocksTUI(App):
                 {"key": "% Change", "visible": True},
                 {"key": "Day's Range", "visible": True},
                 {"key": "52-Wk Range", "visible": True},
+                {"key": "All Time High", "visible": True},
+                {"key": "% Off ATH", "visible": True},
             ]
         
         visible_columns = [c['key'] for c in column_settings if isinstance(c, dict) and c.get('visible', True)]
@@ -1158,6 +1164,16 @@ class StocksTUI(App):
                     raw_pct = val
                     if raw_pct is not None:
                         style = success_color if raw_pct > 0 else (error_color if raw_pct < 0 else "")
+                        text = Text(f"{raw_pct:.2%}", style=style, justify="right")
+                    else:
+                        text = Text("N/A", style=muted_color, justify="right")
+                elif col_key == "All Time High":
+                    raw_ath = val
+                    text = Text(f"${raw_ath:,.2f}", style=price_color, justify="right") if raw_ath is not None else Text("N/A", style=muted_color, justify="right")
+                elif col_key == "% Off ATH":
+                    raw_pct = val
+                    if raw_pct is not None:
+                        style = error_color if raw_pct < 0 else (success_color if raw_pct > 0 else "")
                         text = Text(f"{raw_pct:.2%}", style=style, justify="right")
                     else:
                         text = Text("N/A", style=muted_color, justify="right")
@@ -1616,7 +1632,7 @@ class StocksTUI(App):
                     self._open_mode = True
                     status_label = self.query_one("#last-refresh-time", Label)
                     self._original_status_text = status_label.renderable
-                    status_label.update("OPEN IN: \\[n]ews, \\[h]istory, \\[o]ptions, \\[ESC]ape")
+                    status_label.update("OPEN IN: \\[n]ews, \\[h]istory, \\[o]ptions, \\[y]ahoo Finance, \\[ESC]ape")
                 else:
                     self.bell()
             except NoMatches:
@@ -1653,6 +1669,19 @@ class StocksTUI(App):
             elif key == 'o':  # Options
                 target_category = 'options'
                 self.options_ticker = ticker
+            elif key == 'y':  # Yahoo Finance
+                # Open Yahoo Finance page for the ticker
+                yahoo_url = f"https://finance.yahoo.com/quote/{ticker}"
+                try:
+                    self.notify(f"Opening Yahoo Finance for {ticker}...")
+                    webbrowser.open(yahoo_url)
+                except webbrowser.Error:
+                    self.notify("No web browser found. Please configure your system's default browser.", severity="error", timeout=8)
+                except Exception as e:
+                    self.notify(f"Failed to open browser: {e}", severity="error")
+                # Exit open mode after opening
+                self.action_back_or_dismiss()
+                return
             
             if target_category:
                 # Find the tab ID for this category
