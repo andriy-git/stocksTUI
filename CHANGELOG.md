@@ -1,4 +1,19 @@
 # Change Log
+## [0.1.0-b10] TBD
+
+### Added
+-   `feat(market_provider)`: Add All Time High field to fetched data
+-   `feat(ui)`: Add All Time High and % Off ATH columns to price tables with configurable visibility
+-   `feat(market_provider)`: Add exchange code mapping for SNP, DJI, CBOE, and NIM to NYSE calendar
+-   `feat(ui)`: Add keyboard navigation (j/k, h/l, arrow keys) to config views and debug view
+
+### Changed
+-   `chore(themes)`: Fix formatting and newline in themes.json
+
+### Test
+-   `test(open_mode)`: Update test to include Yahoo Finance option in open mode
+-   `test(market_provider)`: Add exchange mapping tests and cache cleanup
+
 ## [0.1.0-b9] 2025-11-29
 
 ### Changed
