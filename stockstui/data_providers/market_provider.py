@@ -21,9 +21,20 @@ except ImportError:
     mcal = None
 
 def _get_calendar(exchange_name: str):
+    """
+    Retrieves a market calendar, translating exchange codes from yfinance to pandas_market_calendars names.
+    
+    Some yfinance tickers (like ^GSPC, ^DJI) report non-standard exchange names ('SNP', 'DJI').
+    This function normalizes them to valid pandas_market_calendars calendars (e.g., 'NYSE').
+    Caches retrieved calendars for performance.
+    """
     if exchange_name in _market_calendars:
         return _market_calendars[exchange_name]
-    exchange_map = {"NMS": "NYSE", "NYQ": "NYSE", "NYS": "NYSE", "GDAX": "CME_Crypto"}
+    # MAPPING: yfinance exchange codes -> pandas_market_calendars calendar names
+    exchange_map = {
+        "NMS": "NYSE", "NYQ": "NYSE", "NYS": "NYSE", "GDAX": "CME_Crypto",
+        "SNP": "NYSE", "DJI": "NYSE", "CBOE": "NYSE", "NIM": "NYSE"
+    }
     calendar_name = exchange_map.get(exchange_name, exchange_name)
     if mcal is None: return None
     try:
@@ -42,7 +53,8 @@ def _calculate_info_expiry(exchange_name: str) -> datetime:
         if not schedule.empty:
             future_opens = schedule.market_open[schedule.market_open > now]
             if not future_opens.empty:
-                # Expire 5 minutes after the next open to ensure we get the new previous_close value
+                # ASSUMPTION: The 'previous_close' value updates shortly after market open.
+                # We add a 5-minute buffer to ensure the API has refreshed before we re-fetch.
                 return future_opens.iloc[0].to_pydatetime() + timedelta(minutes=5)
     except Exception: pass
     return now + timedelta(hours=1)
@@ -80,9 +92,8 @@ def get_market_price_data(tickers: list[str], force_refresh: bool = False) -> li
     
     live_prices = _fetch_fast_data(fast_data_to_fetch) if fast_data_to_fetch else {}
         
-    # FIX: Merge the freshly fetched fast data (live prices) back into the
-    # main in-memory cache. This ensures the cache is the single source of
-    # truth for the session and data is not lost when switching tabs.
+    # Merge live price updates back into the cache to maintain a single source of truth.
+    # This prevents data loss when switching tabs mid-session.
     if live_prices:
         for ticker, fast_data_update in live_prices.items():
             if ticker in _price_cache and 'data' in _price_cache[ticker]:
@@ -116,7 +127,7 @@ def _fetch_and_cache_slow_data(tickers: list[str]):
                         "symbol": ticker,
                         "description": slow_info.get('longName', ticker),
                         "price": fast_info.get('lastPrice') or slow_info.get('currentPrice'),
-                        "previous_close": slow_info.get('regularMarketPreviousClose') or slow_info.get('previousClose'),
+                        "previous_close": slow_info.get('regularMarketPreviousClose') or slow_info.get('previousClose') or fast_info.get('previousClose'),
                         "day_low": fast_info.get('dayLow') or slow_info.get('regularMarketDayLow'),
                         "day_high": fast_info.get('dayHigh') or slow_info.get('regularMarketDayHigh'),
                         "volume": fast_info.get('lastVolume') or slow_info.get('volume'),
@@ -128,6 +139,7 @@ def _fetch_and_cache_slow_data(tickers: list[str]):
                         "dividend_yield": slow_info.get('dividendYield') or slow_info.get('trailingAnnualDividendYield'),
                         "eps": slow_info.get('trailingEps') or slow_info.get('forwardEps'),
                         "beta": slow_info.get('beta') or slow_info.get('beta3Year'),
+                        "all_time_high": slow_info.get('allTimeHigh'),
                     }
                 }
             else:
@@ -218,17 +230,29 @@ def get_market_status(calendar_name='NYSE') -> dict:
             row = today_schedule.iloc[0]
             market_open, market_close = row.market_open, row.market_close
             
-            result['premarket_open'] = row.get('premarket_open')
-            result['premarket_close'] = row.get('premarket_close')
-            result['postmarket_open'] = row.get('postmarket_open')
-            result['postmarket_close'] = row.get('postmarket_close')
+            # WORKAROUND: The installed pandas_market_calendars version lacks `extended_hours` support.
+            # We manually calculate extended hours based on NYSE standards:
+            #   - Pre-market: 5.5 hours before market_open (e.g., 4:00 AM if open is 9:30 AM).
+            #   - Post-market: 4 hours after market_close (e.g., 8:00 PM for a 4:00 PM close).
+            # These offsets are relative, so they automatically adjust for early-close days.
+            
+            pre_open = market_open - pd.Timedelta(hours=5.5)
+            # Pre-close is market_open
+            
+            # Post-open is market_close
+            post_close = market_close + pd.Timedelta(hours=4)
+
+            result['premarket_open'] = pre_open
+            result['premarket_close'] = market_open
+            result['postmarket_open'] = market_close
+            result['postmarket_close'] = post_close
 
             if market_open <= now < market_close:
                 result['status'] = 'open'
                 result['is_open'] = True
-            elif result['premarket_open'] and result['premarket_close'] and result['premarket_open'] <= now < result['premarket_close']:
+            elif pre_open <= now < market_open:
                 result['status'] = 'pre'
-            elif result['postmarket_open'] and result['postmarket_close'] and result['postmarket_open'] <= now < result['postmarket_close']:
+            elif market_close <= now < post_close:
                 result['status'] = 'post'
         else:
             if now.weekday() >= 5:
