@@ -1,5 +1,5 @@
 # Change Log
-## [0.1.0-b10] TBD
+## [0.1.0-b10] 2025-12-24
 
 ### Added
 -   `feat(market_provider)`: Add All Time High field to fetched data
