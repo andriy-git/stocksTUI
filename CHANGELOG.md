@@ -1,4 +1,15 @@
 # Change Log
+## [0.1.0-b11] 2025-12-25
+
+### Changed
+-   `chore(build)`: Update dev dependencies installation in workflow
+-   `chore(build)`: Add mypy configuration with appropriate ignore settings
+-   `chore(build)`: Update CI workflow to use .[dev] dependencies and simplify ruff checks
+
+### Build
+-   `build(deps)`: Add dev dependencies (ruff, mypy, coverage) to pyproject.toml
+-   `build(ci)`: Simplify ruff checks to basic error detection in CI workflow
+
 ## [0.1.0-b10] 2025-12-24
 
 ### Added
