@@ -25,7 +25,7 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install .  # Install the package itself
-        pip install ".[dev]" # Install dev dependencies from pyproject.toml
+        pip install ruff mypy coverage
 
     - name: Lint with ruff
       run: |
