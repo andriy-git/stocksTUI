@@ -1,9 +1,8 @@
 from typing import Union
 from rich.text import Text
-import pandas as pd
 from stockstui.ui.widgets.navigable_data_table import NavigableDataTable
 
-def format_price_data_for_table(data: list[dict], old_prices: dict, alias_map: dict[str, str]) -> list[tuple]:
+def format_price_data_for_table(data: list[dict], old_prices: dict, alias_map: dict[str, str]) -> list[dict]:
     """
     Formats raw price data for display in the main DataTable.
 
@@ -320,8 +319,11 @@ def format_market_status(market_status: dict | None) -> tuple | None:
         if reason_code == 'weekend':
             reason_display = "(Weekend)"
         elif reason_code == 'holiday':
-            holiday_str = holiday[:15] + '...' if holiday and len(holiday) > 15 else (holiday or "Holiday")
-            reason_display = f"(Holiday: {holiday_str})"
+            if holiday and holiday.lower() != "holiday":
+                holiday_str = holiday[:15] + '...' if len(holiday) > 15 else holiday
+                reason_display = f"(Holiday: {holiday_str})"
+            else:
+                reason_display = "(Holiday)"
     
     text_parts = [(f"{main_status} ", style_var)]
     

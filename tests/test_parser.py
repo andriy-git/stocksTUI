@@ -1,8 +1,7 @@
 import unittest
-import argparse
 from importlib import metadata
 
-from stockstui.parser import create_arg_parser, SessionListAction
+from stockstui.parser import create_arg_parser
 
 class TestArgParser(unittest.TestCase):
     """Unit tests for the command-line argument parser."""

@@ -1,7 +1,5 @@
 import unittest
-from unittest.mock import MagicMock, patch
 
-from stockstui.ui.views.config_views.lists_config_view import ListsConfigView
 
 class TestListsConfigViewAdditional(unittest.IsolatedAsyncioTestCase):
     """Additional tests for the ListsConfigView."""

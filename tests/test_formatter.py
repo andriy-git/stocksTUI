@@ -113,9 +113,20 @@ class TestFormatter(unittest.IsolatedAsyncioTestCase):
         self.assertIn('NYSE', text)
         self.assertIsInstance(text_parts, list)
         
-        status_dict_holiday = {'calendar': 'NYSE', 'status': 'closed', 'holiday': 'Christmas', 'next_open': None, 'reason': 'holiday'}
-        result_holiday = formatter.format_market_status(status_dict_holiday)
-        self.assertIsNotNone(result_holiday)
+        status_dict_holiday_named = {'calendar': 'NYSE', 'status': 'closed', 'holiday': 'Christmas', 'next_open': None, 'reason': 'holiday'}
+        result_holiday_named = formatter.format_market_status(status_dict_holiday_named)
+        self.assertIsNotNone(result_holiday_named)
+        self.assertIn('(Holiday: Christmas)', result_holiday_named[1][1][0])
+
+        status_dict_holiday_generic = {'calendar': 'NYSE', 'status': 'closed', 'holiday': 'Holiday', 'next_open': None, 'reason': 'holiday'}
+        result_holiday_generic = formatter.format_market_status(status_dict_holiday_generic)
+        self.assertIsNotNone(result_holiday_generic)
+        self.assertIn('(Holiday)', result_holiday_generic[1][1][0])
+
+        status_dict_holiday_none = {'calendar': 'NYSE', 'status': 'closed', 'holiday': None, 'next_open': None, 'reason': 'holiday'}
+        result_holiday_none = formatter.format_market_status(status_dict_holiday_none)
+        self.assertIsNotNone(result_holiday_none)
+        self.assertIn('(Holiday)', result_holiday_none[1][1][0])
 
         # Test invalid input
         self.assertIsNone(formatter.format_market_status(None))

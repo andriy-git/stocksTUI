@@ -3,8 +3,6 @@ import logging
 from datetime import datetime, timedelta, timezone
 import time
 import pandas as pd
-from requests.exceptions import RequestException
-import requests
 
 # In-memory cache for storing fetched market data to reduce API calls.
 _price_cache = {}

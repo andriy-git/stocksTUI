@@ -1,5 +1,5 @@
 from textual.containers import Vertical, Horizontal
-from textual.widgets import (Button, DataTable, Input, Label,
+from textual.widgets import (Button, DataTable, Label,
                              ListView, ListItem, Switch)
 from textual.app import ComposeResult, on
 from textual.dom import NoMatches
@@ -7,7 +7,7 @@ from rich.text import Text
 
 from stockstui.ui.modals import (ConfirmDeleteModal, EditListModal, AddListModal,
                                  AddTickerModal, EditTickerModal)
-from stockstui.utils import extract_cell_text, slugify
+from stockstui.utils import extract_cell_text
 
 class ListsConfigView(Vertical):
     """A view for managing watchlists and the tickers within them."""

@@ -2,7 +2,6 @@ import json
 from pathlib import Path
 import logging
 import os
-import time
 from platformdirs import PlatformDirs
 
 # Use platformdirs to determine the correct user directories.

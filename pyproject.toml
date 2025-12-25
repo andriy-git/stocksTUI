@@ -39,6 +39,35 @@ dependencies = [
     "pandas~=2.3.0",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "ruff",
+    "mypy",
+    "coverage",
+]
+
+[tool.mypy]
+ignore_missing_imports = true
+check_untyped_defs = false
+disallow_untyped_defs = false
+warn_return_any = false
+warn_unused_configs = true
+exclude = ["venv", ".venv", "build", "dist"]
+
+
+[[tool.mypy.overrides]]
+module = "stockstui.ui.*"
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = "stockstui.data_providers.*"
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = "stockstui.presentation.*"
+ignore_errors = true
+
+
 [project.urls]
 "Homepage" = "https://github.com/andriy-git/stocksTUI"
 "Bug Tracker" = "https://github.com/andriy-git/stocksTUI/issues"

@@ -1,10 +1,9 @@
 import unittest
 import pandas as pd
-from unittest.mock import MagicMock
 import tempfile
 from pathlib import Path
 
-from textual.widgets import DataTable, Static
+from textual.widgets import DataTable
 from stockstui.ui.views.history_view import HistoryView
 from stockstui.ui.widgets.history_chart import HistoryChart
 from stockstui.main import StocksTUI

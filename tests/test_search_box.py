@@ -1,5 +1,4 @@
 import unittest
-from unittest.mock import MagicMock
 
 from textual.app import App, ComposeResult
 from stockstui.ui.widgets.search_box import SearchBox

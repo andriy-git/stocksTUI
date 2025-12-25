@@ -1,5 +1,4 @@
 import unittest
-from unittest.mock import MagicMock
 
 from textual.app import App
 from stockstui.ui.modals import (

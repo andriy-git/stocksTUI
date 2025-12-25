@@ -1,4 +1,3 @@
-import os
 import unittest
 from stockstui.data_providers import market_provider
 

@@ -4,9 +4,7 @@ import copy
 import json
 import logging
 import time
-from typing import Union
-import sys
-import os
+from typing import Union, Any
 import shutil
 import subprocess
 import argparse
@@ -22,9 +20,9 @@ from textual.containers import Container, Horizontal, Vertical
 from textual.css.query import NoMatches
 from textual.reactive import reactive
 from textual.theme import Theme
-from textual.widgets import (Button, Checkbox, DataTable, Footer,
-                             Input, Label, ListView, ListItem,
-                             Select, Static, Tab, Tabs, Markdown, Switch, RadioButton, ContentSwitcher)
+from textual.widgets import (Button, DataTable, Footer,
+                             Input, Label, Select, Tab, Tabs, Switch)
+from textual.timer import Timer
 from textual.widgets.data_table import CellDoesNotExist
 from textual.coordinate import Coordinate
 from textual.widget import Widget
@@ -39,7 +37,7 @@ from stockstui.config_manager import ConfigManager
 from stockstui.common import (PriceDataUpdated, NewsDataUpdated,
                               TickerDebugDataUpdated, ListDebugDataUpdated, CacheTestDataUpdated,
                               MarketStatusUpdated, HistoricalDataUpdated, TickerInfoComparisonUpdated,
-                              PortfolioChanged, PortfolioDataUpdated, OptionsDataUpdated, OptionsExpirationsUpdated)
+                              OptionsDataUpdated, OptionsExpirationsUpdated)
 from stockstui.data_providers.portfolio import PortfolioManager
 from stockstui.ui.widgets.search_box import SearchBox
 from stockstui.ui.widgets.tag_filter import TagFilterWidget, TagFilterChanged
@@ -50,6 +48,7 @@ from stockstui.ui.views.config_views.general_config_view import GeneralConfigVie
 from stockstui.ui.views.config_views.lists_config_view import ListsConfigView
 from stockstui.ui.views.history_view import HistoryView
 from stockstui.ui.views.news_view import NewsView
+from textual.widgets import ContentSwitcher
 from stockstui.ui.views.debug_view import DebugView
 from stockstui.ui.views.options_view import OptionsView
 from stockstui.ui.widgets.navigable_data_table import NavigableDataTable
@@ -156,13 +155,13 @@ class StocksTUI(App):
     ]
 
     # Reactive variables trigger UI updates when their values change.
-    active_list_category = reactive(None)
-    news_ticker = reactive(None)
-    history_ticker = reactive(None)
-    options_ticker = reactive(None)
-    search_target_table = reactive(None)
+    active_list_category: reactive[str | None] = reactive(None)
+    news_ticker: reactive[str | None] = reactive(None)
+    history_ticker: reactive[str | None] = reactive(None)
+    options_ticker: reactive[str | None] = reactive(None)
+    search_target_table: reactive[DataTable | None] = reactive(None)
     selected_portfolio = reactive("default")
-    active_tag_filter = reactive([])
+    active_tag_filter: reactive[list[str]] = reactive([])
 
     def __init__(self, cli_overrides: dict | None = None):
         """
@@ -180,9 +179,9 @@ class StocksTUI(App):
 
         # ConfigManager now needs the path to the package root to find default_configs
         self.config = ConfigManager(Path(__file__).resolve().parent)
-        self.price_refresh_timer = None
-        self.market_status_timer = None
-        self._price_comparison_data = {}
+        self.price_refresh_timer: Timer | None = None
+        self.market_status_timer: Timer | None = None
+        self._price_comparison_data: dict[str, Any] = {}
         
         # Initialize the database manager for the persistent cache.
         self.db_manager = DbManager(self.config.db_path)
@@ -194,13 +193,13 @@ class StocksTUI(App):
         market_provider.populate_info_cache(self.db_manager.load_info_cache_from_db())
         
         # Internal state management variables
-        self._last_refresh_times = {}
-        self._available_theme_names = []
-        self._processed_themes = {}
-        self.theme_variables = {}
-        self._original_table_data = []
+        self._last_refresh_times: dict[str, str] = {}
+        self._available_theme_names: list[str] = []
+        self._processed_themes: dict[str, Any] = {}
+        self.theme_variables: dict[str, str] = {}
+        self._original_table_data: list[tuple[Any, list[Any]]] = []
         self._last_historical_data = None
-        self._last_options_data = None
+        self._last_options_data: dict[str, Any] | None = None
         self.option_positions = self.db_manager.get_all_option_positions()
         self._news_content_for_ticker: str | None = None
         self._last_news_content: tuple[Union[str, Text], list[str]] | None = None
@@ -211,12 +210,12 @@ class StocksTUI(App):
         self._history_period = "1mo"
         self._sort_mode = False
         self._open_mode = False
-        self._original_status_text = None
+        self._original_status_text: Any = None
         self._last_active_category: str | None = None
         self._last_config_sub_view: str | None = None
         self._force_config_sub_view: str | None = None  # Used to temporarily force a config view after operations
-        self._pre_refresh_cursor_key = None
-        self._pre_refresh_cursor_column = None
+        self._pre_refresh_cursor_key: Any = None
+        self._pre_refresh_cursor_column: int | None = None
         self._is_filter_refresh = False
 
     def add_option_position(self, symbol: str, ticker: str, quantity: float, avg_cost: float):
@@ -523,7 +522,7 @@ class StocksTUI(App):
     def _update_tag_filter_status(self) -> None:
         """Updates the tag filter status display with current counts."""
         try:
-            tag_filter = self.query_one("#tag-filter")
+            tag_filter = self.query_one("#tag-filter", TagFilterWidget)
             category = self.get_active_category()
             
             if category and category not in ["history", "news", "options", "debug", "configs"]:
@@ -689,6 +688,7 @@ class StocksTUI(App):
                 return self.tab_map[int(active_tab_id.split('-')[1]) - 1]['category']
         except (NoMatches, IndexError, ValueError):
             return None
+        return None
             
     def _update_tab_bindings(self):
         """Binds number keys to select tabs."""
@@ -774,7 +774,14 @@ class StocksTUI(App):
             if category == 'all':
                 seen = set()
                 hidden_tabs = set(self.config.get_setting("hidden_tabs", []))
-                symbols = [s['ticker'] for list_name, lst in self.config.lists.items() for s in lst if list_name not in hidden_tabs and s['ticker'] not in seen and not seen.add(s['ticker'])]
+                symbols = []
+                for list_name, lst in self.config.lists.items():
+                    if list_name not in hidden_tabs:
+                        for s in lst:
+                            ticker = s['ticker']
+                            if ticker not in seen:
+                                symbols.append(ticker)
+                                seen.add(ticker)
             else:
                 symbols = [s['ticker'] for s in self.config.lists.get(category, [])]
             
@@ -870,7 +877,7 @@ class StocksTUI(App):
                 pass
         return None
     
-    def _get_active_scrollable_widget(self) -> Container | None:
+    def _get_active_scrollable_widget(self) -> Widget | None:
         """
         Determines the currently visible main container that should be scrolled.
         """
@@ -896,7 +903,7 @@ class StocksTUI(App):
         Renders the main content area based on the selected tab's category.
         """
         output_container = self.query_one("#output-container")
-        config_container = self.query_one("#config-container")
+        config_container: Any = self.query_one("#config-container")
         await output_container.remove_children()
 
         is_config_tab = category == "configs"
@@ -973,7 +980,14 @@ class StocksTUI(App):
             if category == 'all':
                 seen = set()
                 hidden_tabs = set(self.config.get_setting("hidden_tabs", []))
-                symbols = [s['ticker'] for list_name, lst in self.config.lists.items() for s in lst if list_name not in hidden_tabs and s['ticker'] not in seen and not seen.add(s['ticker'])]
+                symbols = []
+                for list_name, lst in self.config.lists.items():
+                    if list_name not in hidden_tabs:
+                        for s in lst:
+                            ticker = s["ticker"]
+                            if ticker not in seen:
+                                symbols.append(ticker)
+                                seen.add(ticker)
             else:
                 symbols = [s['ticker'] for s in self.config.lists.get(category, [])]
             
@@ -988,7 +1002,7 @@ class StocksTUI(App):
                 
                 if cached_data:
                     alias_map = self._get_alias_map()
-                    self._price_comparison_data = {item.get('symbol'): item.get('price') for item in cached_data if item.get('price') is not None}
+                    self._price_comparison_data = {item['symbol']: item.get('price') for item in cached_data if item.get('price') is not None}
                     rows = formatter.format_price_data_for_table(cached_data, self._price_comparison_data, alias_map)
                     self._style_and_populate_price_table(price_table, rows)
                     self._apply_price_table_sort()
@@ -1138,13 +1152,15 @@ class StocksTUI(App):
         
         visible_columns = [c['key'] for c in column_settings if isinstance(c, dict) and c.get('visible', True)]
 
-        for row_data in rows:
+        for item in rows:
+            symbol = item.get('Ticker')
+            if not symbol: continue
+            
             row_values = []
-            symbol = row_data.get("Ticker")
-            change_direction = row_data.get("_change_direction")
+            change_direction = item.get('_change_direction')
             
             for col_key in visible_columns:
-                val = row_data.get(col_key)
+                val = item.get(col_key)
                 
                 if col_key == "Description":
                     if val == 'Invalid Ticker': text = Text(str(val), style=error_color)
@@ -1228,11 +1244,21 @@ class StocksTUI(App):
             if active_category == 'all':
                 seen = set()
                 hidden_tabs = set(self.config.get_setting("hidden_tabs", []))
-                symbols_on_screen = [s['ticker'] for list_name, lst in self.config.lists.items() for s in lst if list_name not in hidden_tabs and s['ticker'] not in seen and not seen.add(s['ticker'])]
+                symbols_on_screen = []
+                for list_name, lst in self.config.lists.items():
+                    if list_name not in hidden_tabs:
+                        for s in lst:
+                            ticker = s['ticker']
+                            if ticker not in seen:
+                                symbols_on_screen.append(ticker)
+                                seen.add(ticker)
             else:
                 symbols_on_screen = [s['ticker'] for s in self.config.lists.get(active_category, [])]
 
-            ordered_filtered_symbols = self._filter_symbols_by_tags(active_category, symbols_on_screen)
+            if active_category:
+                ordered_filtered_symbols = self._filter_symbols_by_tags(active_category, symbols_on_screen)
+            else:
+                ordered_filtered_symbols = symbols_on_screen
 
             data_map = {item['symbol']: item for item in message.data}
 
@@ -1259,7 +1285,7 @@ class StocksTUI(App):
             }
             
             self._apply_price_table_sort()
-            self.query_one("#last-refresh-time").update(now_str)
+            self.query_one("#last-refresh-time", Label).update(now_str)
 
             if self._pre_refresh_cursor_key:
                 try:
@@ -1282,7 +1308,7 @@ class StocksTUI(App):
         try:
             format_result = formatter.format_market_status(status_data)
             if not format_result:
-                self.query_one("#market-status").update(Text("Market: Unknown", style="dim"))
+                self.query_one("#market-status", Label).update(Text("Market: Unknown", style="dim"))
                 return
 
             base_text, parts = format_result
@@ -1292,7 +1318,7 @@ class StocksTUI(App):
                 style = self.theme_variables.get(style_var, "")
                 assembled_text.append(text, style=style)
 
-            self.query_one("#market-status").update(assembled_text)
+            self.query_one("#market-status", Label).update(assembled_text)
             self._schedule_next_market_status_refresh(status_data)
         except NoMatches:
             pass
@@ -1323,7 +1349,8 @@ class StocksTUI(App):
         
         try:
             options_view = self.query_one(OptionsView)
-            options_view.update_expirations(message.expirations or [])
+            expirations = list(message.expirations) if message.expirations else []
+            options_view.update_expirations(expirations)
         except NoMatches:
             pass
 
@@ -1394,7 +1421,7 @@ class StocksTUI(App):
                 latency_text = Text(f"{latency:.3f}s", style=latency_style, justify="right")
                 desc_text = Text(description, style=muted_color if not is_valid or description == 'N/A' else "")
                 dt.add_row(symbol, valid_text, desc_text, latency_text)
-            self.query_one("#last-refresh-time").update(Text.assemble("Test Completed. Total time: ", (f"{message.total_time:.2f}s", f"bold {self.theme_variables.get('warning')}")))
+            self.query_one("#last-refresh-time", Label).update(Text.assemble("Test Completed. Total time: ", (f"{message.total_time:.2f}s", f"bold {self.theme_variables.get('warning')}")))
         except NoMatches: pass
             
     @on(ListDebugDataUpdated)
@@ -1412,7 +1439,7 @@ class StocksTUI(App):
                 latency_text = Text(f"{latency:.3f}s", style=latency_style, justify="right")
                 list_name_text = Text(list_name, style=muted_color if list_name == 'N/A' else "")
                 dt.add_row(list_name_text, str(ticker_count), latency_text)
-            self.query_one("#last-refresh-time").update(Text.assemble("Test Completed. Total time: ", (f"{message.total_time:.2f}s", f"bold {self.theme_variables.get('warning')}")))
+            self.query_one("#last-refresh-time", Label).update(Text.assemble("Test Completed. Total time: ", (f"{message.total_time:.2f}s", f"bold {self.theme_variables.get('warning')}")))
         except NoMatches: pass
 
     @on(CacheTestDataUpdated)
@@ -1427,7 +1454,7 @@ class StocksTUI(App):
                 latency_text = Text(f"{latency * 1000:.3f} ms", style=price_color, justify="right")
                 list_name_text = Text(list_name, style=muted_color if list_name == 'N/A' else "")
                 dt.add_row(list_name_text, str(ticker_count), latency_text)
-            self.query_one("#last-refresh-time").update(Text.assemble("Test Completed. Total time: ", (f"{message.total_time * 1000:.2f} ms", f"bold {self.theme_variables.get('price')}")))
+            self.query_one("#last-refresh-time", Label).update(Text.assemble("Test Completed. Total time: ", (f"{message.total_time * 1000:.2f} ms", f"bold {self.theme_variables.get('price')}")))
         except NoMatches: pass
     
     def _apply_price_table_sort(self) -> None:
@@ -1435,10 +1462,17 @@ class StocksTUI(App):
         if self._sort_column_key is None: return
         try:
             table = self.query_one("#price-table", DataTable)
-            def sort_key(row_values: tuple) -> tuple[int, any]:
-                column_index = table.get_column_index(self._sort_column_key)
-                if column_index >= len(row_values): return (1, 0)
-                cell_value = row_values[column_index]
+            def sort_key(row_values: tuple) -> tuple[int, Any]:
+                if self._sort_column_key:
+                    try:
+                        col_index = table.get_column_index(self._sort_column_key)
+                    except CellDoesNotExist:
+                        return (1, 0) # Treat as lowest priority if column doesn't exist
+                else:
+                    return (1, 0) # Treat as lowest priority if no sort key
+
+                if col_index >= len(row_values): return (1, 0)
+                cell_value = row_values[col_index]
                 text_content = extract_cell_text(cell_value)
                 if text_content in ("N/A", "Invalid Ticker"): return (1, 0)
                 if self._sort_column_key in ("Description", "Ticker"):
@@ -1454,8 +1488,13 @@ class StocksTUI(App):
         if self._history_sort_column_key is None: return
         try:
             table = self.query_one("#history-table", DataTable)
-            def sort_key(row_values: tuple) -> tuple[int, any]:
-                column_index = table.get_column_index(self._history_sort_column_key)
+            target_key = self._history_sort_column_key
+            def sort_key(row_values: tuple) -> tuple[int, Any]:
+                if not target_key: return (1, 0)
+                try:
+                    column_index = table.get_column_index(target_key)
+                except CellDoesNotExist:
+                    return (1, 0)
                 if column_index >= len(row_values): return (1, 0)
                 text_content = extract_cell_text(row_values[column_index])
                 if self._history_sort_column_key == "Date":
@@ -1523,7 +1562,7 @@ class StocksTUI(App):
         self.action_refresh()
 
         try:
-            status_label = self.query_one("#last-refresh-time")
+            status_label = self.query_one("#last-refresh-time", Label)
             if new_category in ['history', 'news', 'options', 'debug', 'configs']:
                 status_label.update("")
         except NoMatches:
@@ -1600,7 +1639,9 @@ class StocksTUI(App):
         """Restores the price table to its original, unsorted order."""
         self._sort_column_key = None
         self._sort_reverse = False
-        await self._display_data_for_category(self.get_active_category())
+        active_cat = self.get_active_category()
+        if active_cat:
+            await self._display_data_for_category(active_cat)
 
     def action_focus_input(self) -> None:
         """Focus the primary input widget of the current view using the new helper method."""
@@ -1732,7 +1773,8 @@ class StocksTUI(App):
         elif category == 'configs':
              # In the new config layout, the target table is in the lists view
             try:
-                target_id = "#" + self.query_one(ListsConfigView).query_one(DataTable).id
+                table_id = self.query_one(ListsConfigView).query_one(DataTable).id
+                target_id = "#" + table_id if table_id else None
             except NoMatches:
                 target_id = None
         
@@ -1758,11 +1800,11 @@ class StocksTUI(App):
         matcher = Matcher(query)
         self.search_target_table.clear()
         if not query:
-            for row_key, row_data in self._original_table_data: self.search_target_table.add_row(*row_data, key=row_key.value)
+            for row_key, row_data in self._original_table_data: self.search_target_table.add_row(*row_data, key=row_key)
             return
         for row_key, row_data in self._original_table_data:
             searchable_string = " ".join(extract_cell_text(cell) for cell in row_data)
-            if matcher.match(searchable_string) > 0: self.search_target_table.add_row(*row_data, key=row_key.value)
+            if matcher.match(searchable_string) > 0: self.search_target_table.add_row(*row_data, key=row_key)
 
     @on(Input.Submitted, '#search-box')
     def on_search_submitted(self, event: Input.Submitted):
@@ -1790,7 +1832,11 @@ class StocksTUI(App):
             
             # Get the ticker symbol from the row key (not from a column, as column order is configurable)
             coordinate = Coordinate(row=price_table.cursor_row, column=0)
-            ticker = price_table.coordinate_to_cell_key(coordinate).row_key.value
+            ticker_val = price_table.coordinate_to_cell_key(coordinate).row_key.value
+            if not ticker_val:
+                self.notify("Invalid ticker selected.", severity="error")
+                return
+            ticker = ticker_val
             
             # Find the ticker in the config to get current values
             ticker_data = None
@@ -1802,7 +1848,8 @@ class StocksTUI(App):
                 for list_name, list_data in self.config.lists.items():
                     if list_name not in hidden_tabs:
                         for item in list_data:
-                            if item.get('ticker', '').upper() == ticker.upper():
+                            item_ticker = item.get('ticker')
+                            if item_ticker and item_ticker.upper() == ticker.upper():
                                 if ticker_data is None:
                                     ticker_data = item.copy()
                                 list_names.append(list_name)
@@ -1811,7 +1858,8 @@ class StocksTUI(App):
                 # Single list category
                 list_data = self.config.lists.get(category, [])
                 for item in list_data:
-                    if item.get('ticker', '').upper() == ticker.upper():
+                    item_ticker = item.get('ticker')
+                    if item_ticker and item_ticker.upper() == ticker.upper():
                         ticker_data = item.copy()
                         list_names.append(category)
                         break
@@ -1836,7 +1884,10 @@ class StocksTUI(App):
                     self.action_refresh(force=False)
                     self.notify(f"Updated {field} for '{ticker}'.")
             
-            self.push_screen(QuickEditTickerModal(ticker, category, ticker_data), on_close)
+            if ticker and category and ticker_data:
+                self.push_screen(QuickEditTickerModal(ticker, category, ticker_data), on_close)
+            else:
+                self.bell()
         
         except NoMatches:
             self.bell()
@@ -1863,17 +1914,27 @@ class StocksTUI(App):
 
             dt.clear()
 
+            symbols_on_screen = []
             if active_category == 'all':
                 seen = set()
                 hidden_tabs = set(self.config.get_setting("hidden_tabs", []))
-                symbols_on_screen = [s['ticker'] for list_name, lst in self.config.lists.items() for s in lst if list_name not in hidden_tabs and s['ticker'] not in seen and not seen.add(s['ticker'])]
+                for list_name, lst in self.config.lists.items():
+                    if list_name not in hidden_tabs:
+                        for s in lst:
+                            ticker = s['ticker']
+                            if ticker not in seen:
+                                symbols_on_screen.append(ticker)
+                                seen.add(ticker)
             else:
                 symbols_on_screen = [s['ticker'] for s in self.config.lists.get(active_category, [])]
 
             ordered_filtered_symbols = self._filter_symbols_by_tags(active_category, symbols_on_screen)
 
-            data_for_table = [market_provider.get_cached_price(s) for s in ordered_filtered_symbols]
-            data_for_table = [item for item in data_for_table if item is not None]
+            data_for_table: list[dict] = []
+            for s in ordered_filtered_symbols:
+                cached = market_provider.get_cached_price(s)
+                if cached is not None:
+                    data_for_table.append(cached)
 
             if not data_for_table:
                 if ordered_filtered_symbols:
@@ -1926,15 +1987,15 @@ def run_cli_output(args: argparse.Namespace):
     if args.session_list:
         target_names.extend(args.session_list.keys())
 
-    lists_to_iterate = []
+    lists_to_iterate: list[tuple[str, list[dict]]] = []
     if not target_names:
-        lists_to_iterate = config.lists.items()
+        lists_to_iterate = list(config.lists.items())
     else:
         unique_target_names = list(set(target_names))
         lists_to_iterate = [(name, lst) for name, lst in config.lists.items() if name in unique_target_names]
         
     if not lists_to_iterate:
-        console.print(f"[bold red]Error:[/] No lists found matching your criteria.")
+        console.print("[bold red]Error:[/] No lists found matching your criteria.")
         return
         
     ordered_tickers = []

@@ -1,5 +1,4 @@
 import unittest
-from textual.validation import ValidationResult
 from stockstui.common import (
     PriceDataUpdated, NewsDataUpdated, MarketStatusUpdated,
     HistoricalDataUpdated, TickerInfoComparisonUpdated,

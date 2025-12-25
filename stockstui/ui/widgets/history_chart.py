@@ -1,6 +1,5 @@
 import pandas as pd
 import numpy as np
-import plotext
 from textual_plotext import PlotextPlot
 
 

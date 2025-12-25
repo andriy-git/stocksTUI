@@ -1,5 +1,4 @@
 import unittest
-import asyncio
 from unittest.mock import MagicMock
 
 from tests.test_utils import create_test_app

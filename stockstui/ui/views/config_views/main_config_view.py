@@ -9,7 +9,6 @@ if TYPE_CHECKING:
     from stockstui.ui.views.config_view import ConfigContainer
 
 
-from textual.binding import Binding
 
 class MainConfigView(Static):
     """The main hub screen for the configuration tab."""

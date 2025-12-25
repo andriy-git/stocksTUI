@@ -1,8 +1,7 @@
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 import pandas as pd
 
-from stockstui.data_providers.portfolio import PortfolioManager
 from stockstui.data_providers import market_provider
 
 

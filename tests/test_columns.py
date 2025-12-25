@@ -1,12 +1,10 @@
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 from stockstui.presentation import formatter
 from stockstui.config_manager import ConfigManager
 import json
 import tempfile
-import shutil
 from pathlib import Path
-import os
 
 class TestColumns(unittest.TestCase):
     def test_formatter_returns_dict(self):

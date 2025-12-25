@@ -1,8 +1,6 @@
 import unittest
-from unittest.mock import MagicMock
 
 from textual.app import App, ComposeResult
-from textual.containers import VerticalScroll
 from textual.widgets import Button
 
 from stockstui.ui.widgets.tag_filter import TagFilterWidget, TagFilterChanged

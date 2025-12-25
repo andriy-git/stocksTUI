@@ -1,15 +1,14 @@
 import unittest
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import MagicMock
 from textual.widgets import Tabs, Label
-from textual.coordinate import Coordinate
 
 from tests.test_utils import create_test_app
 from stockstui.ui.widgets.navigable_data_table import NavigableDataTable
 
 try:
-    from textual.css.query import NoMatches
+    pass
 except Exception:
-    from textual.css.query import QueryError as NoMatches
+    pass
 
 
 class TestAppOpenMode(unittest.IsolatedAsyncioTestCase):

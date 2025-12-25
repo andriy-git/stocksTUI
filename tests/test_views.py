@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from textual.app import App
-from textual.widgets import DataTable, Select, Markdown
+from textual.widgets import DataTable
 from textual.theme import Theme
 from textual import on
 
@@ -10,7 +10,6 @@ from stockstui.common import TickerDebugDataUpdated
 from stockstui.ui.views.debug_view import DebugView
 from stockstui.ui.views.news_view import NewsView
 from stockstui.ui.views.config_view import ConfigContainer
-from stockstui.ui.views.config_views.general_config_view import GeneralConfigView
 from stockstui.ui.views.config_views.lists_config_view import ListsConfigView
 from stockstui.presentation import formatter
 

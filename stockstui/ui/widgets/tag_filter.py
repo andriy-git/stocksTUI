@@ -1,5 +1,5 @@
 from textual.message import Message
-from textual.containers import Horizontal, Container, Vertical, VerticalScroll, Grid
+from textual.containers import Horizontal, VerticalScroll, Grid
 from textual.widgets import Button, Label, Static
 from textual.widget import Widget
 from textual.app import ComposeResult

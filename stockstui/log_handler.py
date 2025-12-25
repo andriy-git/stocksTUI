@@ -1,5 +1,4 @@
 import logging
-import threading
 from textual.app import App
 
 class TextualHandler(logging.Handler):

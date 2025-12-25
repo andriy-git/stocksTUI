@@ -1,5 +1,5 @@
 from textual.containers import Vertical, Horizontal
-from textual.widgets import (Button, Checkbox, Input, Label,
+from textual.widgets import (Button, Input, Label,
                              Select, Switch, ListView, ListItem)
 from textual.app import ComposeResult, on
 from textual.validation import Number
