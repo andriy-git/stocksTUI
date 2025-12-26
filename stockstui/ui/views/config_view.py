@@ -9,6 +9,7 @@ from .config_views.main_config_view import MainConfigView
 from .config_views.general_config_view import GeneralConfigView
 from .config_views.lists_config_view import ListsConfigView
 from .config_views.portfolio_config_view import PortfolioConfigView
+from .config_views.fred_config_view import FredConfigView
 
 
 class ConfigContainer(Vertical):
@@ -36,6 +37,7 @@ class ConfigContainer(Vertical):
             yield GeneralConfigView(id="general", classes="config-view-child")
             yield ListsConfigView(id="lists", classes="config-view-child")
             yield PortfolioConfigView(id="portfolios", classes="config-view-child")
+            yield FredConfigView(id="fred", classes="config-view-child")
 
     def on_mount(self) -> None:
         """Set focus to the main container and initialize navigation history."""
@@ -97,3 +99,7 @@ class ConfigContainer(Vertical):
     def show_portfolios(self):
         """Switches to the portfolio management view."""
         self._switch_view("portfolios")
+
+    def show_fred(self):
+        """Switches to the FRED settings view."""
+        self._switch_view("fred")

@@ -51,6 +51,7 @@ from stockstui.ui.views.news_view import NewsView
 from textual.widgets import ContentSwitcher
 from stockstui.ui.views.debug_view import DebugView
 from stockstui.ui.views.options_view import OptionsView
+from stockstui.ui.views.fred_view import FredView
 from stockstui.ui.widgets.navigable_data_table import NavigableDataTable
 from stockstui.data_providers import market_provider
 from stockstui.data_providers import options_provider
@@ -601,11 +602,14 @@ class StocksTUI(App):
         hidden_tabs = set(self.config.get_setting("hidden_tabs", []))
         
         all_list_categories = list(self.config.lists.keys())
-        all_possible_categories = ["all"] + all_list_categories + ["history", "news", "options", "debug"]
+        # Use dict.fromkeys to remove duplicates while preserving order
+        all_possible_categories = list(dict.fromkeys(["all"] + all_list_categories + ["history", "news", "options", "fred", "debug"]))
         
         for category in all_possible_categories:
             if category not in hidden_tabs:
-                self.tab_map.append({'name': category.replace("_", " ").capitalize(), 'category': category})
+                # Special case for FRED to display uppercase
+                display_name = "FRED" if category == "fred" else category.replace("_", " ").capitalize()
+                self.tab_map.append({'name': display_name, 'category': category})
         self.tab_map.append({'name': "Configs", 'category': 'configs'})
 
     async def _rebuild_app(self, new_active_category: str | None = None, config_sub_view: str | None = None):
@@ -615,10 +619,15 @@ class StocksTUI(App):
         self._setup_dynamic_tabs()
         tabs_widget = self.query_one(Tabs)
         current_active_cat = new_active_category or self.get_active_category()
+        
         await tabs_widget.clear()
         
         for i, tab_data in enumerate(self.tab_map, start=1):
-            await tabs_widget.add_tab(Tab(f"{i}: {tab_data['name']}", id=f"tab-{i}"))
+            tab_id = f"tab-{i}"
+            # Safety check: ensure no residual widget exists with this ID
+            if tabs_widget.query(f"#{tab_id}"):
+                await tabs_widget.query(f"#{tab_id}").remove()
+            await tabs_widget.add_tab(Tab(f"{i}: {tab_data['name']}", id=tab_id))
         self._update_tab_bindings()
         
         try:
@@ -770,7 +779,7 @@ class StocksTUI(App):
         Refreshes price data for the current view.
         """
         category = self.get_active_category()
-        if category and category not in ["history", "news", "options", "debug", "configs"]:
+        if category and category not in ["history", "news", "options", "fred", "debug", "configs"]:
             if category == 'all':
                 seen = set()
                 hidden_tabs = set(self.config.get_setting("hidden_tabs", []))
@@ -867,7 +876,9 @@ class StocksTUI(App):
             target_id = '#config-container'
         elif category == 'debug':
             target_id = '#debug-table'
-        elif category and category not in ['history', 'news', 'configs', 'debug']:
+        elif category == 'fred':
+            target_id = '#fred-summary-table'
+        elif category and category not in ['history', 'news', 'configs', 'debug', 'fred']:
             target_id = '#price-table'
 
         if target_id:
@@ -946,10 +957,12 @@ class StocksTUI(App):
             await output_container.mount(NewsView())
         elif category == 'options':
             await output_container.mount(OptionsView())
+        elif category == 'fred':
+            await output_container.mount(FredView())
         elif category == 'debug':
             await output_container.mount(DebugView())
         else:
-            if category not in ["history", "news", "options", "debug", "configs"]:
+            if category not in ["history", "news", "options", "fred", "debug", "configs"]:
                 available_tags = self._get_available_tags_for_category(category)
                 tag_filter = TagFilterWidget(available_tags=available_tags, id="tag-filter")
                 tag_filter.display = False

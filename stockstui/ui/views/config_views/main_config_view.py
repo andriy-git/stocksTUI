@@ -36,6 +36,8 @@ class MainConfigView(Static):
             yield Button("Watchlists", id="goto-lists", variant="primary", classes="config-hub-button")
             yield Static(classes="spacer")
             yield Button("Portfolios", id="goto-portfolios", variant="primary", classes="config-hub-button")
+            yield Static(classes="spacer")
+            yield Button("FRED Settings", id="goto-fred", variant="primary", classes="config-hub-button")
 
     @on(Button.Pressed)
     def on_button_pressed(self, event: Button.Pressed) -> None:
@@ -47,3 +49,5 @@ class MainConfigView(Static):
             container.show_lists()
         elif event.button.id == "goto-portfolios":
             container.show_portfolios()
+        elif event.button.id == "goto-fred":
+            container.show_fred()

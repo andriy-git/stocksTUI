@@ -3,6 +3,9 @@
     "default_tab_category": "stocks",
     "auto_refresh": false,
     "refresh_interval": 300.0,
+    "hidden_tabs": [
+        "fred"
+    ],
     "column_settings": [
         {
             "key": "Ticker",
