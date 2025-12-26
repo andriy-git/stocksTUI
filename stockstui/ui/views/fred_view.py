@@ -1,0 +1,219 @@
+from textual.app import ComposeResult, on
+from textual.containers import Vertical
+from textual.widgets import Label, DataTable
+from textual.dom import NoMatches
+from textual.binding import Binding
+from textual import work
+from rich.text import Text
+
+from stockstui.data_providers import fred_provider
+from stockstui.ui.widgets.navigable_data_table import NavigableDataTable
+from stockstui.ui.edit_fred_series_modal import EditFredSeriesModal
+
+class FredDataTable(NavigableDataTable):
+    """Specific DataTable for FRED view with overridden bindings."""
+    
+    BINDINGS = [
+        # Override 'e' - use 'screen.' prefix won't work. Instead define action here.
+        Binding("e", "edit_series", "Edit Alias"),
+        Binding("backspace", "app.back_or_dismiss", "Back", show=False),
+    ]
+    
+    def action_edit_series(self):
+        """Bubble edit_series action to parent FredView."""
+        # Find the parent FredView and call its action
+        for ancestor in self.ancestors:
+            if hasattr(ancestor, 'action_edit_series'):
+                ancestor.action_edit_series()
+                return
+
+class FredView(Vertical):
+    """View displaying a summary dashboard of configured FRED series."""
+
+    BINDINGS = [
+        Binding("i", "focus_table", "Focus Table", show=False),
+        # 'e' might be handled by the table when focused, but we keep this as fallback?
+        # Actually bindings on the view are useful if focus is on the view container but not the table?
+        # But for 'e' to work on a row, table must be focused.
+    ]
+
+    def compose(self) -> ComposeResult:
+        yield Label("Economic Data Summary", classes="content-header")
+        yield FredDataTable(id="fred-summary-table", zebra_stripes=True)
+
+    def on_mount(self) -> None:
+        """Initialize the view."""
+        table = self.query_one("#fred-summary-table", FredDataTable)
+        # Defining columns as requested
+        table.add_columns(
+            "Series", 
+            "Current", 
+            "Date", 
+            "Change", 
+            "YoY Change", 
+            "5Y Change"
+        )
+        self.load_all_series()
+        # NOTE: Do NOT call table.focus() here - it steals focus from Tabs.
+        # Focus is managed by the App via action_focus_input (i) or action_activate_tab (Enter).
+
+    def action_focus_table(self):
+        """Focus the data table."""
+        try:
+            self.query_one("#fred-summary-table").focus()
+        except NoMatches:
+            pass
+
+    def action_edit_series(self):
+        """Edit the alias of the selected series."""
+        try:
+            table = self.query_one("#fred-summary-table", FredDataTable)
+            if table.cursor_type == "none":
+                return
+
+            row_key = table.coordinate_to_cell_key(table.cursor_coordinate).row_key
+            if not row_key:
+                return
+             
+            series_id = row_key.value
+            
+            settings = self.app.config.settings.get("fred_settings", {})
+            aliases = settings.get("series_aliases", {})
+            current_alias = aliases.get(series_id, "")
+            
+            def handle_edit(new_alias: str | None):
+                if new_alias is None: return 
+                
+                fred_settings = self.app.config.settings.get("fred_settings", {})
+                if "series_aliases" not in fred_settings:
+                    fred_settings["series_aliases"] = {}
+                
+                if new_alias:
+                    fred_settings["series_aliases"][series_id] = new_alias
+                else:
+                    if series_id in fred_settings["series_aliases"]:
+                        del fred_settings["series_aliases"][series_id]
+
+                self.app.config.settings["fred_settings"] = fred_settings
+                self.app.config.save_settings()
+                self.load_all_series() 
+                self.app.notify(f"Updated alias for {series_id}")
+                
+            self.app.push_screen(EditFredSeriesModal(series_id, current_alias), handle_edit)
+        except NoMatches:
+            pass
+
+    @work(exclusive=True, thread=True)
+    def load_all_series(self):
+        """Fetch summary data for all configured series."""
+        settings = self.app.config.settings.get("fred_settings", {})
+        api_key = settings.get("api_key")
+        
+        if not api_key:
+             self.app.call_from_thread(self._show_error)
+             return
+
+        series_list = settings.get("series_list", ["GDP", "CPIAUCSL", "UNRATE"])
+        if not series_list:
+            self.app.call_from_thread(self._display_empty)
+            return
+
+        self.app.call_from_thread(self._set_loading, True)
+        
+        summaries = []
+        for series_id in series_list:
+            # We fetching sequentially for now to be gentle on limited threads/connections
+            # Could be parallelized if needed
+            s = fred_provider.get_series_summary(series_id, api_key)
+            summaries.append(s)
+
+        self.app.call_from_thread(self._populate_table, summaries)
+
+    def _set_loading(self, loading: bool):
+        try:
+            self.query_one("#fred-summary-table", DataTable).loading = loading
+        except NoMatches:
+            pass
+
+    def _show_error(self):
+        try:
+            table = self.query_one("#fred-summary-table", DataTable)
+            table.loading = False
+            table.clear()
+            table.add_row("Error: API Key missing. Go to Configs > FRED Settings.")
+        except NoMatches:
+            pass
+
+    def _display_empty(self):
+        try:
+            table = self.query_one("#fred-summary-table", DataTable)
+            table.loading = False
+            table.clear()
+            table.add_row("No series configured. Go to Configs > FRED Settings to add data.")
+        except NoMatches:
+            pass
+
+    def _populate_table(self, summaries: list):
+        try:
+            table = self.query_one("#fred-summary-table", DataTable)
+            table.loading = False
+            table.clear()
+            
+            # Get theme colors
+            success_color = self.app.theme_variables.get("success", "green")
+            error_color = self.app.theme_variables.get("error", "red")
+            text_muted = self.app.theme_variables.get("text-muted", "dim")
+            
+            settings = self.app.config.settings.get("fred_settings", {})
+            aliases = settings.get("series_aliases", {})
+
+            for item in summaries:
+                # Format Name/Title
+                series_id = item.get("id")
+                alias = aliases.get(series_id)
+                
+                if alias:
+                    name_text = Text(alias, style="bold")
+                    # Optionally show original ID/Title in muted text
+                    # name_text.append(f" ({series_id})", style=text_muted) 
+                else:
+                    name_text = Text(item.get("title", series_id))
+                    if item.get("units"):
+                        name_text.append(f" ({item.get('units')})", style=text_muted)
+                
+                # Format Current Value
+                current_val = item.get("current")
+                if isinstance(current_val, (int, float)):
+                    current_text = Text(f"{current_val:,.2f}", justify="right")
+                else:
+                    current_text = Text(str(current_val), justify="right", style=text_muted)
+
+                # Format Date
+                date_text = Text(item.get("date", "N/A"), justify="center")
+
+                # Helper to format changes
+                def format_change(val):
+                    if not isinstance(val, (int, float)):
+                        return Text("N/A", justify="right", style=text_muted)
+                    
+                    color = success_color if val > 0 else (error_color if val < 0 else "")
+                    prefix = "+" if val > 0 else ""
+                    return Text(f"{prefix}{val:,.2f}", style=color, justify="right")
+
+                table.add_row(
+                    name_text,
+                    current_text,
+                    date_text,
+                    format_change(item.get("change_1p")),
+                    format_change(item.get("change_1y")),
+                    format_change(item.get("change_5y")),
+                    key=series_id 
+                )
+                
+            # Set initial cursor position if table is empty cursor-wise
+            if table.row_count > 0 and table.cursor_row is None:
+                table.cursor_coordinate = (0, 0)
+            # NOTE: Do NOT call table.focus() here - it steals focus from Tabs.
+
+        except NoMatches:
+            pass
