@@ -1,6 +1,13 @@
 # Change Log
 ## [0.1.0-b11] 2025-12-25
 
+### Added
+-   `feat(fred)`: Add FRED data provider with caching and API integration
+-   `feat(fred)`: Add FRED UI view with summary dashboard and edit modal
+-   `feat(fred)`: Add FRED configuration view for managing API key and series
+-   `feat(fred)`: Integrate FRED view into main application navigation and config
+-   `test(fred)`: Add integration tests for FRED functionality
+
 ### Changed
 -   `chore(build)`: Update dev dependencies installation in workflow
 -   `chore(build)`: Add mypy configuration with appropriate ignore settings
