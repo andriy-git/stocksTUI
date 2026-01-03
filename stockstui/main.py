@@ -36,6 +36,7 @@ from platformdirs import PlatformDirs
 from stockstui.config_manager import ConfigManager
 from stockstui.common import (PriceDataUpdated, NewsDataUpdated,
                               TickerDebugDataUpdated, ListDebugDataUpdated, CacheTestDataUpdated,
+                              FredDebugDataUpdated,
                               MarketStatusUpdated, HistoricalDataUpdated, TickerInfoComparisonUpdated,
                               OptionsDataUpdated, OptionsExpirationsUpdated)
 from stockstui.data_providers.portfolio import PortfolioManager
@@ -53,6 +54,7 @@ from stockstui.ui.views.debug_view import DebugView
 from stockstui.ui.views.options_view import OptionsView
 from stockstui.ui.views.fred_view import FredView
 from stockstui.ui.widgets.navigable_data_table import NavigableDataTable
+from stockstui.data_providers import fred_provider
 from stockstui.data_providers import market_provider
 from stockstui.data_providers import options_provider
 from stockstui.presentation import formatter
@@ -1140,6 +1142,48 @@ class StocksTUI(App):
         if not get_current_worker().is_cancelled:
             self.post_message(CacheTestDataUpdated(data, total_time))
 
+    @work(exclusive=True, group="fred_debug", thread=True)
+    def run_fred_debug_test(self, series_list: list[str], api_key: str):
+        """Worker to show raw FRED API response data (not our calculations)."""
+        from stockstui.data_providers import fred_provider
+        start_time = time.perf_counter()
+
+        data = []
+        for series_id in series_list:
+            try:
+                # Check if API key is configured
+                if not api_key:
+                    data.append({"_error": "No API key configured. Configure in Configs > FRED Settings."})
+                    break
+
+                # Get RAW series info directly from FRED API
+                raw_info = fred_provider.get_series_info(series_id, api_key)
+
+                # Get RAW observations directly from FRED API (latest 10)
+                raw_observations = fred_provider.get_series_observations(series_id, api_key)
+
+                data.append({
+                    "_section": "Series Info (from FRED API)",
+                    "id": series_id,
+                    "info": raw_info
+                })
+
+                data.append({
+                    "_section": "Latest Observations (from FRED API)",
+                    "id": series_id,
+                    "observations": raw_observations[:3] if raw_observations else []  # Show first 3
+                })
+
+            except Exception as e:
+                data.append({
+                    "_error": f"Error fetching {series_id}: {str(e)}",
+                    "id": series_id
+                })
+
+        total_time = time.perf_counter() - start_time
+        if not get_current_worker().is_cancelled:
+            self.post_message(FredDebugDataUpdated(data, total_time))
+
     def _style_and_populate_price_table(self, price_table: DataTable, rows: list[dict]):
         """
         Applies dynamic styling and populates the main price table.
@@ -1468,6 +1512,35 @@ class StocksTUI(App):
                 list_name_text = Text(list_name, style=muted_color if list_name == 'N/A' else "")
                 dt.add_row(list_name_text, str(ticker_count), latency_text)
             self.query_one("#last-refresh-time", Label).update(Text.assemble("Test Completed. Total time: ", (f"{message.total_time * 1000:.2f} ms", f"bold {self.theme_variables.get('price')}")))
+        except NoMatches: pass
+
+    @on(FredDebugDataUpdated)
+    async def on_fred_debug_data_updated(self, message: FredDebugDataUpdated):
+        """Handles arrival of the FRED API debug test data - displays raw API responses."""
+        try:
+            for button in self.query(".debug-buttons Button"): button.disabled = False
+            dt = self.query_one("#debug-table", DataTable); dt.loading = False; dt.clear()
+
+            # Format the raw FRED API response data
+            for item in message.data:
+                if "_error" in item:
+                    dt.add_row("Error:", item["_error"])
+                elif "_section" in item:
+                    dt.add_row(item["_section"], item.get("id", "N/A"))
+                    if "observations" in item:
+                        obs_list = item["observations"]
+                        for obs in obs_list:
+                            dt.add_row(f"  {obs['date']}", f"  {obs['value']}")
+                    elif "info" in item and item["info"]:
+                        info = item["info"]
+                        for key, value in info.items():
+                            if key != "id":  # Skip ID since we already show it
+                                dt.add_row(f"  {key}:", f"  {value}")
+                else:
+                    dt.add_row("Raw Data:", str(item))
+
+            self.query_one("#last-refresh-time", Label).update("Raw FRED API Data Loaded")
+        except NoMatches: pass
         except NoMatches: pass
     
     def _apply_price_table_sort(self) -> None:
@@ -2000,14 +2073,16 @@ def run_cli_output(args: argparse.Namespace):
     if args.session_list:
         target_names.extend(args.session_list.keys())
 
+    fred_requested = 'fred' in target_names or args.output == 'all'
+
     lists_to_iterate: list[tuple[str, list[dict]]] = []
     if not target_names:
         lists_to_iterate = list(config.lists.items())
     else:
         unique_target_names = list(set(target_names))
         lists_to_iterate = [(name, lst) for name, lst in config.lists.items() if name in unique_target_names]
-        
-    if not lists_to_iterate:
+
+    if not lists_to_iterate and not fred_requested:
         console.print("[bold red]Error:[/] No lists found matching your criteria.")
         return
         
@@ -2069,6 +2144,59 @@ def run_cli_output(args: argparse.Namespace):
         table.add_row(desc, Text(price_text, style="cyan"), Text(change_text, style=style), Text(pct_text, style=style), day_r, wk_r, symbol)
 
     console.print(table)
+
+    # --- FRED Data Section ---
+    if fred_requested:
+        console.print()  # Spacer
+        fred_settings = config.settings.get("fred_settings", {})
+        api_key = fred_settings.get("api_key")
+
+        if not api_key:
+            console.print("[bold red]Error:[/] FRED API key is missing. Configure it in the TUI or config file.")
+        else:
+            series_list = fred_settings.get("series_list", ["GDP", "CPIAUCSL", "UNRATE"])
+            if series_list:
+                with console.status("[bold green]Fetching FRED data...[/]"):
+                    fred_data = []
+                    for sid in series_list:
+                        s = fred_provider.get_series_summary(sid, api_key)
+                        fred_data.append(s)
+
+                fred_table = Table(title="Economic Data (FRED)", show_header=True, header_style="bold green")
+                fred_table.add_column("Series", style="bold", width=30)
+                fred_table.add_column("Current", justify="right")
+                fred_table.add_column("YoY %", justify="right")
+                fred_table.add_column("Z-10Y", justify="right")
+                fred_table.add_column("% Range", justify="right")
+                fred_table.add_column("Date", justify="center")
+                fred_table.add_column("Units", style="dim")
+
+                for item in fred_data:
+                    current = item.get("current")
+                    current_str = f"{current:,.2f}" if isinstance(current, (int, float)) else "N/A"
+
+                    yoy = item.get("yoy_pct")
+                    yoy_str = f"{yoy:+.1f}%" if yoy is not None else "N/A"
+                    yoy_style = "green" if yoy and yoy > 0 else ("red" if yoy and yoy < 0 else "")
+
+                    z = item.get("z_10y")
+                    z_str = f"{z:+.2f}" if z is not None else "N/A"
+                    z_style = "bold red" if z and abs(z) > 2 else ("yellow" if z and abs(z) > 1 else "")
+
+                    rng = item.get("pct_of_range")
+                    rng_str = f"{rng:.0f}%" if rng is not None else "N/A"
+
+                    fred_table.add_row(
+                        item.get("title", item.get("id")),
+                        current_str,
+                        Text(yoy_str, style=yoy_style),
+                        Text(z_str, style=z_style),
+                        rng_str,
+                        item.get("date", "N/A"),
+                        item.get("units_short") or item.get("units", "")
+                    )
+
+                console.print(fred_table)
 
 def main():
     """The main entry point for the application."""
