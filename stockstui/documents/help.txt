@@ -45,6 +45,11 @@ OPTIONS
         Start on the Options tab. If TICKER is provided, options data for
         that symbol will be loaded. If omitted, the view will be empty.
 
+    --fred [SERIES_ID]
+        Start on the Economic Data (FRED) tab. If SERIES_ID is provided,
+        data for that FRED series will be loaded. If omitted, the view
+        will show configured series.
+
     --debug
         Start on the Debug tab, which provides tools for testing API latency
         and cache performance.
@@ -59,7 +64,9 @@ OPTIONS
         Output data directly to the terminal without launching the TUI.
         If no LISTS are provided, all tickers from all configured lists
         are displayed. LISTS can be a single watchlist name or a comma-
-        separated list of names (e.g., stocks,crypto).
+        separated list of names (e.g., stocks,crypto,fred).
+        The 'fred' option will output economic data from the Federal Reserve
+        Economic Data (FRED) API.
 
     --session-list NAME=TICKER1,TICKER2 ...
         Create one or more temporary watchlists for the current session only.
@@ -128,6 +135,45 @@ CONFIGURATION
     - `stockstui.log`: A debug log file.
 
     These files can be safely deleted to reset caches or configuration.
+
+OPTIONS COLUMNS
+    When viewing options chain data, the following columns are displayed in the
+    Calls and Puts tables:
+
+    - Strike: The strike price of the option contract
+    - Last: The last traded price of the option
+    - Bid: The current bid price (price buyers are willing to pay)
+    - Ask: The current ask price (price sellers are willing to accept)
+    - Chg %: Percentage change from the previous day's closing price
+    - Vol: Trading volume for the day (number of contracts traded)
+    - OI: Open Interest (number of outstanding contracts)
+    - IV: Implied Volatility (market's expectation of future volatility)
+    - Δ (Delta): Sensitivity of option price to changes in underlying stock price
+    - Γ (Gamma): Rate of change in Delta for a $1 move in underlying stock
+    - Θ (Theta): Time decay of the option (value lost per day)
+    - ν (Vega): Sensitivity to changes in implied volatility
+    - Pos: Position held in this specific contract (if tracked)
+    - P/L: Profit/Loss for the position in this specific contract
+
+FRED COLUMNS
+    When viewing FRED (Federal Reserve Economic Data) information, the following
+    columns are displayed in the table:
+
+    - Series: The name or ID of the economic series (e.g., GDP, UNRATE)
+    - Current: The most recent value for the series
+    - YoY %: Year-over-year percentage change showing how the value has changed
+             compared to the same period last year
+    - Roll-12: 12-month rolling average for trend analysis
+    - Roll-24: 24-month rolling average for trend analysis
+    - Z-10Y: Z-score relative to the 10-year average, indicating how current
+             values compare to long-term trends (values >2 or <-2 are significant)
+    - 10Y Min: 10-year historical minimum value
+    - 10Y Max: 10-year historical maximum value
+    - % Range: Percentage position within the 10-year range
+    - Obs Date: Observation date of the most recent data point
+    - Freq: Frequency of the data (M for Monthly, Q for Quarterly)
+    - Units: The unit of measurement for the series (e.g., Thousands of Persons,
+             Index, Percentage)
 
 NOTES
     All ticker symbols must be in the format used by Yahoo Finance

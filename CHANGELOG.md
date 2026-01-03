@@ -1,5 +1,5 @@
 # Change Log
-## [0.1.0-b11] 2025-12-25
+## [0.1.0-b11] 2026-01-03
 
 ### Added
 -   `feat(fred)`: Add FRED data provider with caching and API integration
@@ -7,6 +7,10 @@
 -   `feat(fred)`: Add FRED configuration view for managing API key and series
 -   `feat(fred)`: Integrate FRED view into main application navigation and config
 -   `test(fred)`: Add integration tests for FRED functionality
+-   `docs(man)`: Add comprehensive documentation for FRED functionality in --man
+-   `docs(man)`: Add documentation for -o fred and --fred command line options
+-   `docs(man)`: Add documentation for FRED data table columns in --man
+-   `docs(man)`: Add documentation for Options data table columns in --man
 
 ### Changed
 -   `chore(build)`: Update dev dependencies installation in workflow
