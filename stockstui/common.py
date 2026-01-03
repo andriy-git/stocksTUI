@@ -49,6 +49,11 @@ class CacheTestDataUpdated(Message):
     def __init__(self, data: list[dict], total_time: float) -> None:
         self.data, self.total_time = data, total_time; super().__init__()
 
+class FredDebugDataUpdated(Message):
+    """Posted when the FRED API debug test is complete."""
+    def __init__(self, data: list[dict], total_time: float) -> None:
+        self.data, self.total_time = data, total_time; super().__init__()
+
 class PortfolioChanged(Message):
     """Posted when the selected portfolio changes."""
     def __init__(self, portfolio_id: str) -> None:

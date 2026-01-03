@@ -2,7 +2,7 @@ from textual.containers import Vertical, Horizontal, Container
 from textual.widgets import Button, Static
 from textual.app import ComposeResult, on
 
-from stockstui.ui.modals import CompareInfoModal
+from stockstui.ui.modals import CompareInfoModal, FredSeriesModal
 # Import the new NavigableDataTable
 from stockstui.ui.widgets.navigable_data_table import NavigableDataTable
 
@@ -17,6 +17,7 @@ class DebugView(Vertical):
             yield Button("Test Tickers (Latency)", id="debug-test-tickers")
             yield Button("Test Lists (Network)", id="debug-test-lists")
             yield Button("Test Cache (Local Speed)", id="debug-test-cache")
+            yield Button("Test FRED (API)", id="debug-test-fred")
             
         # Container to display the results of the debug tests
         with Container(id="debug-output-container"):
@@ -79,6 +80,24 @@ class DebugView(Vertical):
                 dt.add_row("[yellow]Running cache speed test...[/]")
                 lists_to_test = {name: [s['ticker'] for s in tickers] for name, tickers in self.app.config.lists.items()}
                 self.app.run_cache_test(lists_to_test)
+            elif button_id == "debug-test-fred":
+                # Use dedicated FredSeriesModal to get FRED series ID from user
+                async def on_fred_modal_close(series_id: str | None):
+                    if series_id:
+                        # User submitted a series ID
+                        dt.add_columns("Section", "Data")
+                        dt.add_row("[yellow]Running FRED API test...[/]")
+
+                        fred_settings = self.app.config.settings.get("fred_settings", {})
+                        api_key = fred_settings.get("api_key", "")
+                        self.app.run_fred_debug_test([series_id.strip().upper()], api_key)
+                    else:
+                        # User cancelled the modal, so re-enable buttons and restore initial state.
+                        await container.mount(Static("[dim]Run a test to see results.[/dim]", id="info-message"))
+                        for button in self.query(".debug-buttons Button"):
+                            button.disabled = False
+
+                self.app.push_screen(FredSeriesModal(), on_fred_modal_close)
 
     def on_key(self, event) -> None:
         """Handle keyboard navigation for debug buttons."""
