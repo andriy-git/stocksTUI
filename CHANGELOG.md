@@ -6,6 +6,9 @@
 -   `feat(fred)`: Add FRED UI view with summary dashboard and edit modal
 -   `feat(fred)`: Add FRED configuration view for managing API key and series
 -   `feat(fred)`: Integrate FRED view into main application navigation and config
+-   `feat(fred)`: Add enhanced FRED metrics (rolling averages, z-scores, historical ranges)
+-   `feat(fred)`: Add FRED API debug testing in Debug view
+-   `feat(fred)`: Add FRED data output support in CLI mode (-o fred)
 -   `test(fred)`: Add integration tests for FRED functionality
 -   `docs(man)`: Add comprehensive documentation for FRED functionality in --man
 -   `docs(man)`: Add documentation for -o fred and --fred command line options
