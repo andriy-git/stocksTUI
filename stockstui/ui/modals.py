@@ -323,3 +323,43 @@ class ConfirmAddToAllPortfoliosModal(ModalScreen[bool]):
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Dismisses the modal, returning True if confirmed, False otherwise."""
         self.dismiss(event.button.id == "confirm")
+
+
+class FredSeriesModal(ModalScreen[str | None]):
+    """A modal dialog to get a FRED series ID for the FRED API debug test."""
+
+    def compose(self) -> ComposeResult:
+        """Creates the layout for the FRED series modal."""
+        with Vertical(id="dialog"):
+            yield Label("Enter FRED series ID:")
+            yield Input(
+                placeholder="e.g., GDP, CPIAUCSL, UNRATE",
+                id="fred-series-input",
+                validators=[NotEmpty()]
+            )
+            with Horizontal(id="dialog-buttons"):
+                yield Button("Submit", variant="primary", id="submit")
+                yield Button("Cancel", id="cancel")
+
+    def on_mount(self) -> None:
+        """Focus the input field when the modal is mounted."""
+        self.query_one("#fred-series-input", Input).focus()
+
+    @on(Input.Submitted, "#fred-series-input")
+    def on_input_submitted(self) -> None:
+        """Handle Enter key press in the input field."""
+        self.query_one("#submit", Button).press()
+
+    @on(Button.Pressed)
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        """Handle button presses."""
+        if event.button.id == "cancel":
+            self.dismiss(None)
+        elif event.button.id == "submit":
+            input_widget = self.query_one("#fred-series-input", Input)
+            if input_widget.is_valid:
+                self.dismiss(input_widget.value.strip().upper())
+            else:
+                # Show validation errors
+                for error in input_widget.errors:
+                    self.app.notify(str(error), severity="error")
