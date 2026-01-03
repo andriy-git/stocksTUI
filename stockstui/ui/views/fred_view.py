@@ -42,16 +42,24 @@ class FredView(Vertical):
         yield FredDataTable(id="fred-summary-table", zebra_stripes=True)
 
     def on_mount(self) -> None:
-        """Initialize the view."""
+        """Initialize the view with enhanced column layout."""
         table = self.query_one("#fred-summary-table", FredDataTable)
-        # Defining columns as requested
+        # Enhanced columns per recommended layout:
+        # Core signal block: Series, Current, YoY %, Roll-12, Roll-24, Z-10Y
+        # Context block: 10Y Min, 10Y Max, % Range, Obs Date, Freq
         table.add_columns(
-            "Series", 
-            "Current", 
-            "Date", 
-            "Change", 
-            "YoY Change", 
-            "5Y Change"
+            "Series",     # Title/alias
+            "Current",    # Most recent value
+            "YoY %",      # Year-over-year percent change
+            "Roll-12",    # 12-month rolling average
+            "Roll-24",    # 24-month rolling average
+            "Z-10Y",      # Z-score (10-year basis)
+            "10Y Min",    # 10-year historical minimum
+            "10Y Max",    # 10-year historical maximum
+            "% Range",    # Position in historical range
+            "Obs Date",   # Most recent observation date
+            "Freq",       # M/Q (monthly/quarterly)
+            "Units",      # Short units from FRED
         )
         self.load_all_series()
         # NOTE: Do NOT call table.focus() here - it steals focus from Tabs.
@@ -158,29 +166,26 @@ class FredView(Vertical):
             table = self.query_one("#fred-summary-table", DataTable)
             table.loading = False
             table.clear()
-            
-            # Get theme colors
+
+            # Get theme colors for styling
             success_color = self.app.theme_variables.get("success", "green")
             error_color = self.app.theme_variables.get("error", "red")
+            warning_color = self.app.theme_variables.get("warning", "yellow")
             text_muted = self.app.theme_variables.get("text-muted", "dim")
-            
+
             settings = self.app.config.settings.get("fred_settings", {})
             aliases = settings.get("series_aliases", {})
 
             for item in summaries:
-                # Format Name/Title
                 series_id = item.get("id")
                 alias = aliases.get(series_id)
-                
+
+                # Format Name/Title
                 if alias:
                     name_text = Text(alias, style="bold")
-                    # Optionally show original ID/Title in muted text
-                    # name_text.append(f" ({series_id})", style=text_muted) 
                 else:
                     name_text = Text(item.get("title", series_id))
-                    if item.get("units"):
-                        name_text.append(f" ({item.get('units')})", style=text_muted)
-                
+
                 # Format Current Value
                 current_val = item.get("current")
                 if isinstance(current_val, (int, float)):
@@ -188,28 +193,69 @@ class FredView(Vertical):
                 else:
                     current_text = Text(str(current_val), justify="right", style=text_muted)
 
-                # Format Date
+                # Helper to format percentage values with color
+                def format_pct(val, show_sign=True):
+                    if val is None:
+                        return Text("N/A", justify="right", style=text_muted)
+                    color = success_color if val > 0 else (error_color if val < 0 else "")
+                    prefix = "+" if val > 0 and show_sign else ""
+                    return Text(f"{prefix}{val:.1f}%", style=color, justify="right")
+
+                # Helper to format numeric values
+                def format_num(val, decimals=2):
+                    if val is None:
+                        return Text("N/A", justify="right", style=text_muted)
+                    return Text(f"{val:,.{decimals}f}", justify="right")
+
+                # Format Z-score with warning colors for extreme values
+                def format_zscore(val):
+                    if val is None:
+                        return Text("N/A", justify="right", style=text_muted)
+                    # Extreme values (|z| > 2) get warning/error color
+                    if abs(val) > 2:
+                        color = error_color
+                    elif abs(val) > 1:
+                        color = warning_color
+                    else:
+                        color = ""
+                    prefix = "+" if val > 0 else ""
+                    return Text(f"{prefix}{val:.2f}", style=color, justify="right")
+
+                # Format % range with colors for extreme positions
+                def format_pct_range(val):
+                    if val is None:
+                        return Text("N/A", justify="right", style=text_muted)
+                    # Near extremes get warning colors
+                    if val >= 90:
+                        color = warning_color  # Near max
+                    elif val <= 10:
+                        color = warning_color  # Near min
+                    else:
+                        color = ""
+                    return Text(f"{val:.0f}%", style=color, justify="right")
+
+                # Format date
                 date_text = Text(item.get("date", "N/A"), justify="center")
 
-                # Helper to format changes
-                def format_change(val):
-                    if not isinstance(val, (int, float)):
-                        return Text("N/A", justify="right", style=text_muted)
-                    
-                    color = success_color if val > 0 else (error_color if val < 0 else "")
-                    prefix = "+" if val > 0 else ""
-                    return Text(f"{prefix}{val:,.2f}", style=color, justify="right")
+                # Format frequency
+                freq_text = Text(item.get("frequency", "M"), justify="center")
 
                 table.add_row(
                     name_text,
                     current_text,
+                    format_pct(item.get("yoy_pct")),
+                    format_num(item.get("roll_12")),
+                    format_num(item.get("roll_24")),
+                    format_zscore(item.get("z_10y")),
+                    format_num(item.get("hist_min_10y")),
+                    format_num(item.get("hist_max_10y")),
+                    format_pct_range(item.get("pct_of_range")),
                     date_text,
-                    format_change(item.get("change_1p")),
-                    format_change(item.get("change_1y")),
-                    format_change(item.get("change_5y")),
-                    key=series_id 
+                    freq_text,
+                    Text(item.get("units_short") or item.get("units", ""), justify="left"),
+                    key=series_id
                 )
-                
+
             # Set initial cursor position if table is empty cursor-wise
             if table.row_count > 0 and table.cursor_row is None:
                 table.cursor_coordinate = (0, 0)
