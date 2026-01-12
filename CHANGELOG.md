@@ -11,11 +11,14 @@
 -   `feat(fred)`: Add FRED data output support in CLI mode (-o fred)
 -   `feat(fred)`: Add FRED series browser opening functionality (o key) and Enter key editing
 -   `feat(fred)`: Add dedicated AddFredSeriesModal and increase observation limits
+-   `feat(cli)`: Add support for tag filtering in CLI mode via `--tags`
+-   `feat(ui)`: Hide "Portfolios" button from Main Settings to focus on core features
+-   `feat(ui)`: Implement dynamic theme-aware colors for charts and CLI headers (replace hardcoded colors)
 -   `feat(ui)`: Add Enter key action handling for DataTable selections across views
 -   `feat(ui)`: Add keyboard navigation improvements (i, j, k, h, l) to config and debug views
 -   `feat(ui)`: Add row selection handling for ticker editing in lists config view
 -   `feat(cli)`: Fix CLI output to properly handle cases when only FRED is requested
--   `test(fred)`: Add integration tests for FRED functionality
+-   `test(fred)`: Add integration and UI tests for FRED functionality
 -   `docs(man)`: Add comprehensive documentation for FRED functionality in --man
 -   `docs(man)`: Add documentation for -o fred and --fred command line options
 -   `docs(man)`: Add documentation for FRED data table columns in --man
