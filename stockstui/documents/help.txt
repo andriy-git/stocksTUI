@@ -74,6 +74,11 @@ OPTIONS
         multiple times.
         Example: stockstui -o --session-list mylist=AAPL,MSFT
 
+    --tags TAG1,TAG2,...
+        Filter watchlists or CLI output to only show tickers possessing
+        one or more of the specified tags.
+        Example: stockstui -o stocks --tags tech,ai
+
     --period {1d,5d,1mo,6mo,ytd,1y,5y,max}
         When used with --history, specifies the initial time period for the
         data chart or table.
@@ -101,9 +106,15 @@ KEYBINDINGS
       Shift+Tab     Focus the previous widget.
       Esc           Dismiss menus/dialogs, or navigate back in the Configs tab.
       Backspace     Navigate back in the Configs tab. Does not interfere with text input.
+      [ / ]         Cycle between expiration dates (Options View).
+      p             Manage position for selected option contract.
+      c             Toggle between chart and table view (Options/History).
 
     Table Interaction
       i             Focus the primary input or table in the current view.
+      e             Edit the selected ticker alias/note (Price View) or FRED series.
+      o             Open the selected ticker/series in the web browser.
+      n / h / O     Quick-switch to News, History, or Options for selected ticker.
       /             Search the currently visible table (Price, Config, Debug).
       Ctrl+C        Copy the currently selected text to the system clipboard.
 
@@ -135,6 +146,28 @@ CONFIGURATION
     - `stockstui.log`: A debug log file.
 
     These files can be safely deleted to reset caches or configuration.
+
+PRICE COLUMNS
+    When viewing price data for stocks or crypto, the following columns can be 
+    displayed (visibility is configurable in Configs > Watchlists):
+
+    - Description: User-defined alias or the company's long name
+    - Price: The last known market price
+    - Change: Dollar amount change from the previous day's close
+    - % Change: Percentage change from the previous day's close
+    - Day's Range: The low and high price for the current trading day
+    - 52-Wk Range: The low and high price over the last 52 weeks
+    - Ticker: The symbol used to identify the asset (e.g., AAPL)
+    - Volume: The number of shares or units traded during the current day
+    - Open: The price at which the asset began trading today
+    - Prev Close: The closing price from the preceding trading day
+    - PE Ratio: Price-to-Earnings ratio (trailing 12 months)
+    - Market Cap: Total market capitalization of the asset
+    - Div Yield: Dividend yield as a percentage
+    - EPS: Earnings Per Share (trailing 12 months)
+    - Beta: Measure of the asset's volatility compared to the market
+    - All Time High: The highest price ever recorded for the asset
+    - % Off ATH: Percentage difference between current price and All Time High
 
 OPTIONS COLUMNS
     When viewing options chain data, the following columns are displayed in the
