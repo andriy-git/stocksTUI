@@ -151,6 +151,35 @@ class AddTickerModal(ModalScreen[tuple[str, str, str, str] | None]):
                 note = self.query_one("#note-input", Input).value.strip()
                 self.dismiss((ticker, alias, note, tags))
 
+class AddFredSeriesModal(ModalScreen[tuple[str, str, str, str] | None]):
+    """A modal dialog for adding a new FRED series."""
+    def compose(self) -> ComposeResult:
+        """Creates the layout for the add FRED series modal."""
+        with Vertical(id="dialog"):
+            yield Label("Enter new FRED series details:")
+            yield Input(placeholder="Series ID (e.g., GDP)", id="series-input", validators=[NotEmpty()])
+            yield Input(placeholder="Alias (optional, e.g., US GDP)", id="alias-input")
+            with Horizontal(id="dialog-buttons"):
+                yield Button("Add", variant="primary", id="add")
+                yield Button("Cancel", id="cancel")
+
+    def on_mount(self) -> None:
+        """Sets focus to the series input field when the modal is mounted."""
+        self.query_one("#series-input").focus()
+
+    @on(Button.Pressed)
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        """Handles button presses, dismissing the modal with series details or None."""
+        if event.button.id == "cancel":
+            self.dismiss(None)
+            return
+        series_input = self.query_one("#series-input", Input)
+        if event.button.id == "add" and series_input.validate(series_input.value).is_valid:
+            series_id = series_input.value.strip().upper()
+            alias = self.query_one("#alias-input", Input).value.strip() or series_id
+            # Maintain tuple format (ticker, alias, note, tags) for compatibility
+            self.dismiss((series_id, alias, "", ""))
+
 class EditTickerModal(ModalScreen[tuple[str, str, str, str] | None]):
     """A modal dialog for editing an existing ticker's details."""
     def __init__(self, ticker: str, alias: str, note: str, tags: str = "") -> None:
