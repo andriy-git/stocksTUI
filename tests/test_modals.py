@@ -5,6 +5,8 @@ from stockstui.ui.modals import (
     ConfirmDeleteModal, AddListModal, EditListModal,
     AddTickerModal, EditTickerModal, CreatePortfolioModal, EditPortfolioModal
 )
+from stockstui.ui.position_modal import PositionModal
+from stockstui.ui.quick_edit_ticker_modal import QuickEditTickerModal
 
 class ModalsTestApp(App):
     """A minimal app for testing modals."""
@@ -161,3 +163,67 @@ class TestModals(unittest.IsolatedAsyncioTestCase):
             await pilot.click("#save")
             await pilot.pause()
             self.assertEqual(result, ("new_name", "old_desc"))
+
+    async def test_position_modal(self):
+        """Test the PositionModal."""
+        app = ModalsTestApp()
+        async with app.run_test() as pilot:
+            result = None
+            def set_result(r):
+                nonlocal result
+                result = r
+            
+            # Test Save
+            await pilot.app.push_screen(PositionModal("AAPL", {'quantity': 10, 'avg_cost': 150.0}), set_result)
+            await pilot.pause()
+            
+            # Clear inputs
+            await pilot.click("#quantity-input")
+            # Clear existing value (check modal init for value)
+            # Init with quantity 10 -> "10" (length 2)
+            for _ in range(5): await pilot.press("backspace", "delete") 
+            await pilot.press("2", "0")
+            
+            await pilot.click("#cost-input")
+            # Init with avg_cost 150.0 -> "150.0" (length 5)
+            for _ in range(10): await pilot.press("backspace", "delete")
+            await pilot.press("1", "5", "5")
+
+            await pilot.click("#save")
+            await pilot.pause()
+            
+            self.assertEqual(result, (20.0, 155.0))
+
+            # Test Delete
+            result = None
+            await pilot.app.push_screen(PositionModal("AAPL", {'quantity': 10}), set_result)
+            await pilot.pause()
+            await pilot.click("#delete")
+            await pilot.pause()
+            self.assertEqual(result, (0.0, 0.0))
+
+    async def test_quick_edit_ticker_modal(self):
+        """Test the QuickEditTickerModal."""
+        app = ModalsTestApp()
+        async with app.run_test() as pilot:
+            result = None
+            def set_result(r):
+                nonlocal result
+                result = r
+            
+            # Test Edit Alias (Default)
+            ticker_data = {'alias': 'OldAlias', 'note': 'Note', 'tags': 'tag1'}
+            await pilot.app.push_screen(QuickEditTickerModal("AAPL", "stocks", ticker_data), set_result)
+            await pilot.pause()
+            
+            # Should be focused on value input of alias
+            # Clear and type new alias
+            await pilot.click("#value-input")
+            # 'OldAlias' length is 8
+            for _ in range(15): await pilot.press("backspace", "delete")
+            await pilot.press("N", "e", "w", "A", "l", "i", "a", "s")
+            
+            await pilot.click("#save")
+            await pilot.pause()
+            
+            self.assertEqual(result, ("alias", "NewAlias"))
