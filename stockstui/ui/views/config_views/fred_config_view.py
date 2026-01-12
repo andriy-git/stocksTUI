@@ -57,7 +57,7 @@ class FredConfigView(ScrollableContainer):
         table.clear()
         
         settings = self.app.config.settings.get("fred_settings", {})
-        series_list = settings.get("series_list", ["GDP", "CPIAUCSL", "UNRATE"])
+        series_list = settings.get("series_list", [])
         aliases = settings.get("series_aliases", {})
         cached_descriptions = settings.get("series_descriptions", {})
         api_key = settings.get("api_key", "")
