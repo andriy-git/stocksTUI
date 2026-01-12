@@ -35,8 +35,8 @@ class MainConfigView(Static):
             yield Static(classes="spacer")
             yield Button("Watchlists", id="goto-lists", variant="primary", classes="config-hub-button")
             yield Static(classes="spacer")
-            yield Button("Portfolios", id="goto-portfolios", variant="primary", classes="config-hub-button")
-            yield Static(classes="spacer")
+            # yield Button("Portfolios", id="goto-portfolios", variant="primary", classes="config-hub-button")
+            # yield Static(classes="spacer")
             yield Button("FRED Settings", id="goto-fred", variant="primary", classes="config-hub-button")
 
     @on(Button.Pressed)
