@@ -155,7 +155,7 @@ class FredView(Vertical):
              self.app.call_from_thread(self._show_error)
              return
 
-        series_list = settings.get("series_list", ["GDP", "CPIAUCSL", "UNRATE"])
+        series_list = settings.get("series_list", [])
         if not series_list:
             self.app.call_from_thread(self._display_empty)
             return
