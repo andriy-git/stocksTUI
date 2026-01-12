@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import MagicMock, patch, PropertyMock
 import pandas as pd
 from stockstui.ui.widgets.oi_chart import OIChart
 
@@ -29,6 +30,54 @@ class TestOIChart(unittest.TestCase):
         chart = OIChart(self.calls_df, self.puts_df, self.underlying_price)
         self.assertIsNotNone(chart)
         self.assertEqual(chart._underlying_price, self.underlying_price)
+
+    def test_replot_logic(self):
+        """Test the replot logic with mocks."""
+        chart = OIChart(self.calls_df, self.puts_df, self.underlying_price)
+        
+        # Mock app and theme variables
+        mock_app = MagicMock()
+        mock_app.theme_variables = {"green": "green", "red": "red"}
+        
+        # Mock plt property AND app property
+        with patch('stockstui.ui.widgets.oi_chart.OIChart.plt', new_callable=PropertyMock) as mock_plt_prop, \
+             patch('stockstui.ui.widgets.oi_chart.OIChart.app', new_callable=PropertyMock) as mock_app_prop:
+            
+            mock_plt = MagicMock()
+            mock_plt_prop.return_value = mock_plt
+            mock_app_prop.return_value = mock_app
+            
+            chart.replot()
+            
+            # Verify clear_data called
+            mock_plt.clear_data.assert_called_once()
+            
+            # Verify multiple_bar called
+            mock_plt.multiple_bar.assert_called_once()
+            
+            # Verify grid called
+            mock_plt.grid.assert_called_once()
+
+    def test_replot_empty_data(self):
+        """Test replot with empty data handles gracefully."""
+        empty_df = pd.DataFrame(columns=['strike', 'openInterest', 'contractSymbol'])
+        chart = OIChart(empty_df, empty_df, self.underlying_price)
+        
+        mock_app = MagicMock()
+        mock_app.theme_variables = {}
+        
+        with patch('stockstui.ui.widgets.oi_chart.OIChart.plt', new_callable=PropertyMock) as mock_plt_prop, \
+             patch('stockstui.ui.widgets.oi_chart.OIChart.app', new_callable=PropertyMock) as mock_app_prop:
+            
+            mock_plt = MagicMock()
+            mock_plt_prop.return_value = mock_plt
+            mock_app_prop.return_value = mock_app
+            
+            chart.replot()
+            
+            mock_plt.clear_data.assert_called_once()
+            # multiple_bar should NOT be called for empty data
+            mock_plt.multiple_bar.assert_not_called()
 
     def test_chart_with_empty_calls(self):
         """Test chart with empty calls dataframe."""
@@ -62,6 +111,20 @@ class TestOIChart(unittest.TestCase):
         })
         chart = OIChart(single_call, single_put, self.underlying_price)
         self.assertIsNotNone(chart)
+        
+        # Test plotting single strike
+        mock_app = MagicMock()
+        mock_app.theme_variables = {"green": "green", "red": "red"}
+        
+        with patch('stockstui.ui.widgets.oi_chart.OIChart.plt', new_callable=PropertyMock) as mock_plt_prop, \
+             patch('stockstui.ui.widgets.oi_chart.OIChart.app', new_callable=PropertyMock) as mock_app_prop:
+             
+            mock_plt = MagicMock()
+            mock_plt_prop.return_value = mock_plt
+            mock_app_prop.return_value = mock_app
+            
+            chart.replot()
+            mock_plt.multiple_bar.assert_called_once()
 
     def test_chart_with_wide_strikes(self):
         """Test chart with strikes far from underlying."""
