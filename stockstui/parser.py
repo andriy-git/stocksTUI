@@ -111,6 +111,14 @@ def create_arg_parser() -> argparse.ArgumentParser:
 Optionally specify a comma-separated list of watchlists to show.
 If no list is specified, all tickers are shown."""
     )
+
+    parser.add_argument(
+        '--tags',
+        nargs='?',
+        default=None,
+        metavar='TAGS',
+        help="Filter the command-line output by a comma-separated list of tags."
+    )
     parser.add_argument(
         '--session-list',
         nargs='+',
