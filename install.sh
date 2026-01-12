@@ -12,6 +12,11 @@ SYMLINK_PATH="$SYMLINK_TARGET_DIR/$SYMLINK_NAME"
 
 echo "Starting development installation for StocksTUI..."
 
+# 0. Clean cache files in stockstui dir
+echo "Cleaning cache files in stockstui..."
+find "$PROJECT_DIR/stockstui" -type d -name "__pycache__" -exec rm -rf {} +
+find "$PROJECT_DIR/stockstui" -type f -name "*.pyc" -delete
+
 # 1. Set up Python virtual environment
 if [ -d "$VENV_DIR" ]; then
   echo "Virtual environment already exists. Skipping creation."
