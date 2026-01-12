@@ -7,7 +7,7 @@ from textual import work
 from rich.text import Text
 import logging
 
-from stockstui.ui.modals import AddTickerModal
+from stockstui.ui.modals import AddFredSeriesModal
 from stockstui.ui.edit_fred_series_modal import EditFredSeriesModal
 
 
@@ -132,7 +132,10 @@ class FredConfigView(ScrollableContainer):
             # Read from cache
             fred_settings = self.app.config.settings.get("fred_settings", {})
             cached_descriptions = fred_settings.get("series_descriptions", {})
-            desc_column_key = table.columns[2].key
+            
+            # Use columns.values() to safely get the third column key
+            column_list = list(table.columns.values())
+            desc_column_key = column_list[2].key
             
             for series_id, title in cached_descriptions.items():
                 try:
@@ -142,6 +145,31 @@ class FredConfigView(ScrollableContainer):
                     logging.error(f"FRED: Failed to update cell for {series_id}: {e}")
         except NoMatches:
             logging.info("FRED: Table not found, likely view was replaced")
+
+    def on_key(self, event) -> None:
+        """Handle keyboard navigation for FRED configuration view."""
+        buttons = list(self.query("#fred-series-buttons Button"))
+        # Also include the save button at the top
+        buttons.insert(0, self.query_one("#save-fred-api-key", Button))
+        
+        if not buttons:
+            return
+
+        # If 'i' is pressed and we aren't already focused on a button, focus the first one.
+        if event.key == "i" and self.app.focused not in buttons:
+            buttons[0].focus()
+            event.stop()
+            return
+
+        # Handle cycling through buttons with j, k, up, down
+        if self.app.focused in buttons:
+            idx = buttons.index(self.app.focused)
+            if event.key in ("k", "up"):
+                buttons[(idx - 1) % len(buttons)].focus()
+                event.stop()
+            elif event.key in ("j", "down"):
+                buttons[(idx + 1) % len(buttons)].focus()
+                event.stop()
 
     @on(Button.Pressed, "#save-fred-api-key")
     def on_save_api_key(self):
@@ -187,8 +215,13 @@ class FredConfigView(ScrollableContainer):
                 self.repopulate_series_table()
                 self.app.notify(f"Added series {series_id}")
         
-        # Reuse AddTickerModal but we'll just use ticker and alias fields
-        self.app.push_screen(AddTickerModal(), on_close)
+        # Use dedicated AddFredSeriesModal for appropriate context/placeholders
+        self.app.push_screen(AddFredSeriesModal(), on_close)
+
+    @on(DataTable.RowSelected, "#fred-series-table")
+    def on_row_selected(self):
+        """Trigger editing when a row is selected with Enter."""
+        self.on_edit_series()
 
     @on(Button.Pressed, "#edit-fred-series")
     def on_edit_series(self):
