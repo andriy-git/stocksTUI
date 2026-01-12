@@ -5,6 +5,7 @@ from textual.dom import NoMatches
 from textual.binding import Binding
 from textual import work
 from rich.text import Text
+import webbrowser
 
 from stockstui.data_providers import fred_provider
 from stockstui.ui.widgets.navigable_data_table import NavigableDataTable
@@ -16,6 +17,7 @@ class FredDataTable(NavigableDataTable):
     BINDINGS = [
         # Override 'e' - use 'screen.' prefix won't work. Instead define action here.
         Binding("e", "edit_series", "Edit Alias"),
+        Binding("o", "open_series", "Open (Browser)"),
         Binding("backspace", "app.back_or_dismiss", "Back", show=False),
     ]
     
@@ -25,6 +27,14 @@ class FredDataTable(NavigableDataTable):
         for ancestor in self.ancestors:
             if hasattr(ancestor, 'action_edit_series'):
                 ancestor.action_edit_series()
+                return
+
+    def action_open_series(self):
+        """Bubble open_series action to parent FredView."""
+        # Find the parent FredView and call its action
+        for ancestor in self.ancestors:
+            if hasattr(ancestor, 'action_open_series'):
+                ancestor.action_open_series()
                 return
 
 class FredView(Vertical):
@@ -111,6 +121,30 @@ class FredView(Vertical):
         except NoMatches:
             pass
 
+    def action_open_series(self):
+        """Open the selected FRED series in the default web browser."""
+        try:
+            table = self.query_one("#fred-summary-table", FredDataTable)
+            if table.cursor_type == "none" or table.cursor_row < 0:
+                return
+
+            row_key = table.coordinate_to_cell_key(table.cursor_coordinate).row_key
+            if not row_key:
+                return
+             
+            series_id = row_key.value
+            url = f"https://fred.stlouisfed.org/series/{series_id}"
+            
+            try:
+                self.app.notify(f"Opening FRED for {series_id}...")
+                webbrowser.open(url)
+            except webbrowser.Error:
+                self.app.notify("No web browser found. Please configure your system's default browser.", severity="error", timeout=8)
+            except Exception as e:
+                self.app.notify(f"Failed to open browser: {e}", severity="error")
+        except NoMatches:
+            pass
+
     @work(exclusive=True, thread=True)
     def load_all_series(self):
         """Fetch summary data for all configured series."""
@@ -182,7 +216,7 @@ class FredView(Vertical):
 
                 # Format Name/Title
                 if alias:
-                    name_text = Text(alias, style="bold")
+                    name_text = Text(alias)
                 else:
                     name_text = Text(item.get("title", series_id))
 
