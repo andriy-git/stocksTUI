@@ -41,7 +41,9 @@ class HistoryChart(PlotextPlot):
         else:
             return # No data to plot
         
-        plt.plot(x_data, y_data, color="orange") # Plot the price history
+        # Get color from theme, defaulting to orange if not found
+        line_color = self.app.theme_variables.get("orange", "orange")
+        plt.plot(x_data, y_data, color=line_color) # Plot the price history
 
         self._set_date_ticks() # Configure x-axis (date) ticks and labels
         self._set_price_ticks() # Configure y-axis (price) ticks and labels
