@@ -1,6 +1,0 @@
-textual~=5.3.0
-yfinance==0.2.65
-pandas-market-calendars==5.1.1
-plotext==5.3.2
-textual-plotext~=1.0.1
-pandas==2.3.0
