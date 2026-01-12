@@ -255,6 +255,11 @@ class ListsConfigView(Vertical):
                 self.app.notify(f"List '{category}' renamed to '{new_name}'.")
         self.app.push_screen(EditListModal(category), on_close)
 
+    @on(DataTable.RowSelected, "#ticker-table")
+    def on_row_selected(self):
+        """Trigger editing when a row is selected with Enter."""
+        self.on_edit_ticker_pressed()
+
     @on(Button.Pressed, "#edit_ticker")
     def on_edit_ticker_pressed(self):
         """Handles the 'Edit Ticker' button press, opening a modal to edit ticker details."""
