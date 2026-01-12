@@ -58,6 +58,27 @@ class DebugView(Vertical):
             
             self.app.push_screen(CompareInfoModal(), on_modal_close)
             
+        elif button_id == "debug-test-fred":
+            # Use dedicated FredSeriesModal to get FRED series ID from user
+            async def on_fred_modal_close(series_id: str | None):
+                if series_id:
+                    # User submitted a series ID
+                    await container.mount(NavigableDataTable(id="debug-table"))
+                    dt = self.query_one("#debug-table", NavigableDataTable)
+                    dt.clear()
+                    dt.add_columns("Section", "Data")
+                    dt.loading = True
+
+                    fred_settings = self.app.config.settings.get("fred_settings", {})
+                    api_key = fred_settings.get("api_key", "")
+                    self.app.run_fred_debug_test([series_id.strip().upper()], api_key)
+                else:
+                    # User cancelled the modal, so re-enable buttons and restore initial state.
+                    await container.mount(Static("[dim]Run a test to see results.[/dim]", id="info-message"))
+                    for button in self.query(".debug-buttons Button"):
+                        button.disabled = False
+
+            self.app.push_screen(FredSeriesModal(), on_fred_modal_close)
         else:
             # For other tests, directly mount the DataTable and start the test
             await container.mount(NavigableDataTable(id="debug-table"))
@@ -80,31 +101,26 @@ class DebugView(Vertical):
                 dt.add_row("[yellow]Running cache speed test...[/]")
                 lists_to_test = {name: [s['ticker'] for s in tickers] for name, tickers in self.app.config.lists.items()}
                 self.app.run_cache_test(lists_to_test)
-            elif button_id == "debug-test-fred":
-                # Use dedicated FredSeriesModal to get FRED series ID from user
-                async def on_fred_modal_close(series_id: str | None):
-                    if series_id:
-                        # User submitted a series ID
-                        dt.add_columns("Section", "Data")
-                        dt.add_row("[yellow]Running FRED API test...[/]")
-
-                        fred_settings = self.app.config.settings.get("fred_settings", {})
-                        api_key = fred_settings.get("api_key", "")
-                        self.app.run_fred_debug_test([series_id.strip().upper()], api_key)
-                    else:
-                        # User cancelled the modal, so re-enable buttons and restore initial state.
-                        await container.mount(Static("[dim]Run a test to see results.[/dim]", id="info-message"))
-                        for button in self.query(".debug-buttons Button"):
-                            button.disabled = False
-
-                self.app.push_screen(FredSeriesModal(), on_fred_modal_close)
 
     def on_key(self, event) -> None:
-        """Handle keyboard navigation for debug buttons."""
-        if not isinstance(self.app.focused, Button):
+        """Handle keyboard navigation for debug view."""
+        buttons = list(self.query(".debug-buttons Button"))
+        if not buttons:
             return
 
-        if event.key in ("h", "left"):
-            self.screen.focus_previous()
-        elif event.key in ("l", "right"):
-            self.screen.focus_next()
+        # If 'i' is pressed and we aren't already focused on a button, focus the first one.
+        if event.key == "i" and self.app.focused not in buttons:
+            buttons[0].focus()
+            event.stop()
+            return
+
+        # Handle cycling through buttons with h, l, left, right
+        if self.app.focused in buttons:
+            idx = buttons.index(self.app.focused)
+            if event.key in ("h", "left"):
+                buttons[(idx - 1) % len(buttons)].focus()
+                event.stop()
+            elif event.key in ("l", "right"):
+                buttons[(idx + 1) % len(buttons)].focus()
+                event.stop()
+            # If it's 'enter', we don't stop the event, allowing the Button to handle its own press.
