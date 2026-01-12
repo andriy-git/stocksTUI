@@ -9,11 +9,11 @@ _series_cache: Dict[str, Any] = {}
 _info_cache: Dict[str, Any] = {}
 CACHE_DURATION_SECONDS = 300  # 5 minutes
 
-# ASSUMPTION: 600 observations covers 10+ years of monthly data (12*10=120) or quarterly (4*10=40)
-# with buffer for daily series. Needed for proper z-score and historical range calculations.
-OBSERVATION_LIMIT = 600
+# ASSUMPTION: 3000 observations covers 10+ years of daily data (~2520 trading days)
+# and plenty for weekly (520), monthly (120), or quarterly (40).
+OBSERVATION_LIMIT = 3000
 
-def get_series_observations(series_id: str, api_key: str) -> Optional[List[Dict[str, Any]]]:
+def get_series_observations(series_id: str, api_key: str, limit: int = OBSERVATION_LIMIT) -> Optional[List[Dict[str, Any]]]:
     """
     Fetches observations for a specific FRED series.
     Returns observations in descending order (newest first).
@@ -25,10 +25,14 @@ def get_series_observations(series_id: str, api_key: str) -> Optional[List[Dict[
     series_id = series_id.upper()
     now = datetime.now(timezone.utc)
 
+    # Note: We omit limit from cache key for simplicity under the assumption 
+    # that we always request the same "10-year" optimized amount for a given series.
     if series_id in _series_cache:
         timestamp, data = _series_cache[series_id]
         if (now - timestamp).total_seconds() < CACHE_DURATION_SECONDS:
-            return data
+            # If cache has enough data, return it
+            if len(data) >= limit:
+                return data
 
     try:
         url = f"{BASE_URL}/series/observations"
@@ -37,7 +41,7 @@ def get_series_observations(series_id: str, api_key: str) -> Optional[List[Dict[
             "api_key": api_key,
             "file_type": "json",
             "sort_order": "desc",  # Get latest data first
-            "limit": OBSERVATION_LIMIT
+            "limit": limit
         }
         response = requests.get(url, params=params, timeout=10)
         response.raise_for_status()
@@ -156,6 +160,16 @@ def compute_enhanced_metrics(
         short_periods = 1
         long_periods = 2
         z_periods = z_lookback_years
+    elif frequency == "W":
+        # Weekly data
+        short_periods = 52 # 1 year
+        long_periods = 104 # 2 years
+        z_periods = z_lookback_years * 52
+    elif frequency == "D":
+        # Daily data (approx 260 trading days)
+        short_periods = 260 # 1 year
+        long_periods = 520 # 2 years
+        z_periods = z_lookback_years * 260
     else:  # Monthly or default
         short_periods = short_months
         long_periods = long_months
@@ -293,9 +307,12 @@ def get_series_summary(series_id: str, api_key: str) -> Dict[str, Any]:
         "change_5y": "N/A"
     }
 
-    obs_list = get_series_observations(series_id, api_key)
     info = get_series_info(series_id, api_key)
-
+    
+    # Calculate tailored limit based on frequency to optimize data fetching
+    # We want ~10 years of data plus a small buffer (11 years)
+    tailored_limit = 132 # Default fallback (Monthly)
+    
     if info:
         summary["title"] = info.get("title", series_id)
         summary["units"] = info.get("units") or ""
@@ -305,17 +322,27 @@ def get_series_summary(series_id: str, api_key: str) -> Dict[str, Any]:
         freq_str = info.get("frequency", "").lower()
         if "quarterly" in freq_str:
             summary["frequency"] = "Q"
+            tailored_limit = 4 * 11
         elif "annual" in freq_str:
             summary["frequency"] = "A"
-        elif "daily" in freq_str or "weekly" in freq_str:
+            tailored_limit = 15
+        elif "daily" in freq_str:
             summary["frequency"] = "D"
+            tailored_limit = 260 * 11 # ~2860
+        elif "weekly" in freq_str:
+            summary["frequency"] = "W"
+            tailored_limit = 52 * 11 # ~572
         else:
             summary["frequency"] = "M"
+            tailored_limit = 12 * 11 # 132
 
         # Seasonal adjustment status
         sa_str = info.get("seasonal_adjustment_short") or info.get("seasonal_adjustment") or ""
         if "seasonally adjusted" in sa_str.lower():
             summary["seasonal_adj"] = "SA"
+
+    # Now fetch observations with optimized limit
+    obs_list = get_series_observations(series_id, api_key, limit=tailored_limit)
 
     if not obs_list:
         return summary
