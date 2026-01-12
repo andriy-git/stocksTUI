@@ -6,6 +6,20 @@
     "hidden_tabs": [
         "fred"
     ],
+    "fred_settings": {
+        "api_key": "",
+        "series_list": [
+            "GDP",
+            "CPIAUCSL",
+            "UNRATE"
+        ],
+        "series_aliases": {},
+        "series_descriptions": {
+            "GDP": "Gross Domestic Product",
+            "CPIAUCSL": "Consumer Price Index for All Urban Consumers",
+            "UNRATE": "Unemployment Rate"
+        }
+    },
     "column_settings": [
         {
             "key": "Ticker",
