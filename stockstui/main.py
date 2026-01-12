@@ -59,6 +59,7 @@ from stockstui.data_providers import market_provider
 from stockstui.data_providers import options_provider
 from stockstui.presentation import formatter
 from stockstui.utils import extract_cell_text
+from stockstui.utils import parse_tags
 from stockstui.database.db_manager import DbManager
 from stockstui.parser import create_arg_parser
 from stockstui.log_handler import TextualHandler
@@ -2114,6 +2115,12 @@ def run_cli_output(args: argparse.Namespace):
     console = Console()
     app_root = Path(__file__).resolve().parent
     config = ConfigManager(app_root)
+    
+    # Load header color from theme
+    theme_name = config.settings.get("theme", "gruvbox_soft_dark")
+    theme_data = config.themes.get(theme_name, {})
+    header_color = theme_data.get("palette", {}).get("magenta", "magenta")
+    header_style = f"bold {header_color}"
 
     if session_lists := args.session_list:
         for name, tickers in session_lists.items():
@@ -2125,32 +2132,65 @@ def run_cli_output(args: argparse.Namespace):
     if args.session_list:
         target_names.extend(args.session_list.keys())
 
-    fred_requested = 'fred' in target_names or args.output == 'all'
+    # Load hidden tabs to filter content if 'all' is requested
+    hidden_tabs = config.get_setting("hidden_tabs", [])
+    
+    # Logic to determine if FRED should be shown
+    fred_requested = False
+    if 'fred' in target_names:
+        fred_requested = True
+    elif args.output == 'all':
+        fred_requested = 'fred' not in hidden_tabs
 
     lists_to_iterate: list[tuple[str, list[dict]]] = []
     if not target_names:
-        lists_to_iterate = list(config.lists.items())
+        # We need to filter these lists against hidden_tabs
+        all_lists = list(config.lists.items())
+        lists_to_iterate = [(n, l) for n, l in all_lists if n not in hidden_tabs]
     else:
         unique_target_names = list(set(target_names))
         lists_to_iterate = [(name, lst) for name, lst in config.lists.items() if name in unique_target_names]
 
     if not lists_to_iterate and not fred_requested:
-        console.print("[bold red]Error:[/] No lists found matching your criteria.")
+        console.print("[bold red]Error:[/] No visible lists found matching your criteria.")
         return
         
     ordered_tickers = []
     seen_tickers = set()
     alias_map = {}
+    
+    # Process Tags
+    requested_tags = set()
+    if args.tags:
+        # Use util function to parse requested tags too, ensuring consistency
+        requested_tags = set(parse_tags(args.tags))
+
     for _, list_content in lists_to_iterate:
         for item in list_content:
             ticker = item.get("ticker")
+            
+            # Apply Tag Filtering
+            if requested_tags:
+                raw_tags = item.get("tags")
+                if isinstance(raw_tags, str):
+                    item_tags = set(parse_tags(raw_tags))
+                elif isinstance(raw_tags, list):
+                    item_tags = {str(t).lower() for t in raw_tags}
+                else:
+                    item_tags = set()
+                
+                # If disjoint (no intersection), then item does NOT have any of the requested tags.
+                # So if disjoint, skip.
+                if requested_tags.isdisjoint(item_tags):
+                   continue
+            
             if ticker and ticker not in seen_tickers:
                 ordered_tickers.append(ticker)
                 seen_tickers.add(ticker)
                 alias_map[ticker] = item.get("alias", ticker)
 
     if not ordered_tickers and not fred_requested:
-        console.print("[yellow]No tickers found for the specified lists.[/yellow]")
+        console.print("[yellow]No tickers found for the specified lists and tags.[/yellow]")
         return
 
     if ordered_tickers:
@@ -2178,8 +2218,8 @@ def run_cli_output(args: argparse.Namespace):
             description = alias_map.get(ticker) or info.get('longName', ticker)
             rows.append((description, price, change, change_percent, day_range, wk_range, ticker))
 
-        table = Table(title="Ticker Overview", show_header=True, header_style="bold magenta")
-        table.add_column("Description", style="dim", width=30)
+        table = Table(title="Ticker Overview", show_header=True, header_style=header_style)
+        table.add_column("Description", style="dim", no_wrap=False)  # Allow wrapping
         table.add_column("Price", justify="right")
         table.add_column("Change", justify="right")
         table.add_column("% Change", justify="right")
@@ -2200,14 +2240,19 @@ def run_cli_output(args: argparse.Namespace):
 
     # --- FRED Data Section ---
     if fred_requested:
-        console.print()  # Spacer
+        if ordered_tickers:
+            console.print()  # Spacer
         fred_settings = config.settings.get("fred_settings", {})
         api_key = fred_settings.get("api_key")
 
         if not api_key:
             console.print("[bold red]Error:[/] FRED API key is missing. Configure it in the TUI or config file.")
         else:
-            series_list = fred_settings.get("series_list", ["GDP", "CPIAUCSL", "UNRATE"])
+            series_list = fred_settings.get("series_list", [])
+            # Load aliases and cached descriptions
+            aliases = fred_settings.get("series_aliases", {})
+            cached_desc = fred_settings.get("series_descriptions", {})
+            
             if series_list:
                 with console.status("[bold green]Fetching FRED data...[/]"):
                     fred_data = []
@@ -2215,16 +2260,18 @@ def run_cli_output(args: argparse.Namespace):
                         s = fred_provider.get_series_summary(sid, api_key)
                         fred_data.append(s)
 
-                fred_table = Table(title="Economic Data (FRED)", show_header=True, header_style="bold green")
-                fred_table.add_column("Series", style="bold", width=30)
+                # Use same header style as Ticker table for consistency
+                fred_table = Table(title="Economic Data (FRED)", show_header=True, header_style=header_style)
+                fred_table.add_column("Description", style="dim", no_wrap=False) # Allow wrapping
                 fred_table.add_column("Current", justify="right")
                 fred_table.add_column("YoY %", justify="right")
                 fred_table.add_column("Z-10Y", justify="right")
-                fred_table.add_column("% Range", justify="right")
+                fred_table.add_column("% Rng", justify="right", width=5) # Tight width, renamed header
                 fred_table.add_column("Date", justify="center")
-                fred_table.add_column("Units", style="dim")
+                fred_table.add_column("Series ID", style="dim")
 
                 for item in fred_data:
+                    sid = item.get("id")
                     current = item.get("current")
                     current_str = f"{current:,.2f}" if isinstance(current, (int, float)) else "N/A"
 
@@ -2238,15 +2285,18 @@ def run_cli_output(args: argparse.Namespace):
 
                     rng = item.get("pct_of_range")
                     rng_str = f"{rng:.0f}%" if rng is not None else "N/A"
+                    
+                    # Determine description: Alias > Cache > Title from API > ID
+                    description = aliases.get(sid) or cached_desc.get(sid) or item.get("title") or sid
 
                     fred_table.add_row(
-                        item.get("title", item.get("id")),
-                        current_str,
+                        description,
+                        Text(current_str, style="cyan"), # Match Ticker price color
                         Text(yoy_str, style=yoy_style),
                         Text(z_str, style=z_style),
                         rng_str,
                         item.get("date", "N/A"),
-                        item.get("units_short") or item.get("units", "")
+                        sid
                     )
 
                 console.print(fred_table)
