@@ -155,7 +155,7 @@ class ListsConfigView(Vertical):
             switch.value = not switch.value
 
     @on(Button.Pressed, "#add_list")
-    def on_add_list_pressed(self):
+    async def on_add_list_pressed(self):
         """Handles the 'Add List' button press, opening a modal for new list name."""
         async def on_close(new_name: str | None):
             if new_name and new_name not in self.app.config.lists:
@@ -166,7 +166,7 @@ class ListsConfigView(Vertical):
         self.app.push_screen(AddListModal(), on_close)
 
     @on(Button.Pressed, "#add_ticker")
-    def on_add_ticker_pressed(self):
+    async def on_add_ticker_pressed(self):
         """Handles the 'Add Ticker' button press, opening a modal for new ticker details."""
         category = self.app.active_list_category
         if not category:
@@ -186,7 +186,7 @@ class ListsConfigView(Vertical):
         self.app.push_screen(AddTickerModal(), on_close)
 
     @on(Button.Pressed, "#delete_list")
-    def on_delete_list_pressed(self):
+    async def on_delete_list_pressed(self):
         """Handles the 'Delete List' button press, opening a confirmation modal."""
         category = self.app.active_list_category
         if not category:
@@ -222,7 +222,7 @@ class ListsConfigView(Vertical):
             self.app.notify(f"List '{category}' deleted.")
 
     @on(Button.Pressed, "#rename_list")
-    def on_rename_list_pressed(self):
+    async def on_rename_list_pressed(self):
         """Handles the 'Rename List' button press, opening a modal for new name."""
         category = self.app.active_list_category
         if not category:
@@ -256,12 +256,12 @@ class ListsConfigView(Vertical):
         self.app.push_screen(EditListModal(category), on_close)
 
     @on(DataTable.RowSelected, "#ticker-table")
-    def on_row_selected(self):
+    def on_row_selected(self, event: DataTable.RowSelected):
         """Trigger editing when a row is selected with Enter."""
         self.on_edit_ticker_pressed()
 
     @on(Button.Pressed, "#edit_ticker")
-    def on_edit_ticker_pressed(self):
+    async def on_edit_ticker_pressed(self):
         """Handles the 'Edit Ticker' button press, opening a modal to edit ticker details."""
         table = self.query_one("#ticker-table", DataTable)
         if not self.app.active_list_category or table.cursor_row < 0:
@@ -294,7 +294,7 @@ class ListsConfigView(Vertical):
         self.app.push_screen(EditTickerModal(original_ticker, original_alias, original_note, display_tags), on_close)
 
     @on(Button.Pressed, "#delete_ticker")
-    def on_delete_ticker_pressed(self):
+    async def on_delete_ticker_pressed(self):
         """Handles the 'Remove Ticker' button press, opening a confirmation modal."""
         table = self.query_one("#ticker-table", DataTable)
         if not self.app.active_list_category or table.cursor_row < 0:
