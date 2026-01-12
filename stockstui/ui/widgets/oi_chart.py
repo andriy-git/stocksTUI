@@ -137,7 +137,10 @@ class OIChart(PlotextPlot):
             labels,
             [call_oi, put_oi],
             labels=["Calls", "Puts"],
-            color=["green", "red"]
+            color=[
+                self.app.theme_variables.get("green", "green"),
+                self.app.theme_variables.get("red", "red")
+            ]
         )
         
         plt.title(f"Open Interest by Strike for {self._ticker} (Near ${self._underlying_price:.2f})")
