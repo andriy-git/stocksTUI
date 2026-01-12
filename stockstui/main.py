@@ -21,7 +21,7 @@ from textual.css.query import NoMatches
 from textual.reactive import reactive
 from textual.theme import Theme
 from textual.widgets import (Button, DataTable, Footer,
-                             Input, Label, Select, Tab, Tabs, Switch)
+                             Input, Label, Select, Tab, Tabs, Switch, ListView)
 from textual.timer import Timer
 from textual.widgets.data_table import CellDoesNotExist
 from textual.coordinate import Coordinate
@@ -875,9 +875,37 @@ class StocksTUI(App):
         elif category == 'options':
             target_id = '#options-ticker-input'
         elif category == 'configs':
-            target_id = '#config-container'
+            try:
+                # Find the active configuration sub-view by looking at the ContentSwitcher
+                config_container = self.query_one(ConfigContainer)
+                switcher = config_container.query_one(ContentSwitcher)
+                active_view_id = switcher.current
+                
+                # Use a specific selector within the ACTIVE view only
+                active_view = config_container.query_one(f"#{active_view_id}")
+                
+                # Prioritize specific primary widgets if they exist
+                if active_view_id == 'fred':
+                    try: return active_view.query_one("#fred-series-buttons Button")
+                    except NoMatches: pass
+                elif active_view_id == 'lists':
+                    try: return active_view.query_one("#symbol-list-view")
+                    except NoMatches: pass
+
+                # General Fallback: Find the first widget that CAN focus and is visible
+                for widget in active_view.query("*"):
+                    if getattr(widget, 'can_focus', False) and widget.visible:
+                        return widget
+                
+                return active_view
+            except NoMatches:
+                target_id = '#config-container'
         elif category == 'debug':
-            target_id = '#debug-table'
+            try:
+                # Focus first button specifically within debug view
+                return self.query_one("DebugView").query_one(".debug-buttons Button")
+            except NoMatches:
+                target_id = '#debug-table'
         elif category == 'fred':
             target_id = '#fred-summary-table'
         elif category and category not in ['history', 'news', 'configs', 'debug', 'fred']:
@@ -1159,7 +1187,7 @@ class StocksTUI(App):
                 # Get RAW series info directly from FRED API
                 raw_info = fred_provider.get_series_info(series_id, api_key)
 
-                # Get RAW observations directly from FRED API (latest 10)
+                # Get RAW observations directly from FRED API
                 raw_observations = fred_provider.get_series_observations(series_id, api_key)
 
                 data.append({
@@ -1171,7 +1199,7 @@ class StocksTUI(App):
                 data.append({
                     "_section": "Latest Observations (from FRED API)",
                     "id": series_id,
-                    "observations": raw_observations[:3] if raw_observations else []  # Show first 3
+                    "observations": raw_observations[:10] if raw_observations else []  # Show first 10
                 })
 
             except Exception as e:
@@ -1734,12 +1762,36 @@ class StocksTUI(App):
         if (target_widget := self._get_primary_view_widget()):
             target_widget.focus()
 
-    def action_activate_tab(self) -> None:
-        """When Enter is pressed on Tabs, focus the primary widget of the active tab."""
-        # Only activate if Tabs currently has focus
-        if self.focused and isinstance(self.focused, Tabs):
+    async def action_activate_tab(self) -> None:
+        """When Enter is pressed, handle contextually: Tab activation or Item selection."""
+        # 0. Skip if focus is on a widget that handles Enter natively
+        if self.focused and isinstance(self.focused, (Input, Button, Select, Switch, ListView)):
+            raise SkipAction()
+
+        # 1. Handle Tabs activation
+        if self.focused and isinstance(self.focused, (Tabs, Tab)):
             if (target_widget := self._get_primary_view_widget()):
                 target_widget.focus()
+            return
+
+        # 2. Handle DataTable selection across different views
+        if self.focused and isinstance(self.focused, DataTable):
+            category = self.get_active_category()
+            
+            if category == 'options':
+                try:
+                    options_view = self.query_one(OptionsView)
+                    options_view.action_manage_position()
+                except NoMatches: pass
+            elif category == 'fred':
+                try:
+                    fred_view = self.query_one(FredView)
+                    fred_view.action_edit_series()
+                except NoMatches: pass
+            elif category not in ['history', 'news', 'debug', 'configs']:
+                # Main price table
+                await self.action_enter_open_mode()
+            return
 
     async def action_enter_open_mode(self) -> None:
         """Enters 'open mode', or if already in open mode, opens the ticker in Options."""
@@ -1751,7 +1803,7 @@ class StocksTUI(App):
         category = self.get_active_category()
         
         # Only activate open mode for price table views
-        if category and category not in ['news', 'history', 'options', 'debug', 'configs']:
+        if category and category not in ['news', 'history', 'options', 'fred', 'debug', 'configs']:
             try:
                 # Check if a row is selected
                 price_table = self.query_one("#price-table", NavigableDataTable)
@@ -2097,53 +2149,54 @@ def run_cli_output(args: argparse.Namespace):
                 seen_tickers.add(ticker)
                 alias_map[ticker] = item.get("alias", ticker)
 
-    if not ordered_tickers:
+    if not ordered_tickers and not fred_requested:
         console.print("[yellow]No tickers found for the specified lists.[/yellow]")
         return
 
-    with console.status("[bold green]Fetching data...[/]"):
-        try:
-            ticker_objects = yf.Tickers(" ".join(ordered_tickers))
-            all_info = {ticker: ticker_objects.tickers[ticker].info for ticker in ordered_tickers}
-        except Exception as e:
-            console.print(f"[bold red]Failed to fetch data from API:[/] {e}")
-            return
+    if ordered_tickers:
+        with console.status("[bold green]Fetching data...[/]"):
+            try:
+                ticker_objects = yf.Tickers(" ".join(ordered_tickers))
+                all_info = {ticker: ticker_objects.tickers[ticker].info for ticker in ordered_tickers}
+            except Exception as e:
+                console.print(f"[bold red]Failed to fetch data from API:[/] {e}")
+                return
 
-    rows = []
-    for ticker in ordered_tickers:
-        info = all_info.get(ticker)
-        if not info or not info.get('currency'):
-            rows.append(("Invalid Ticker", None, None, None, "N/A", "N/A", ticker))
-            continue
+        rows = []
+        for ticker in ordered_tickers:
+            info = all_info.get(ticker)
+            if not info or not info.get('currency'):
+                rows.append(("Invalid Ticker", None, None, None, "N/A", "N/A", ticker))
+                continue
 
-        price = info.get('lastPrice') or info.get('currentPrice') or info.get('regularMarketPrice')
-        prev_close = info.get('regularMarketPreviousClose') or info.get('previousClose') or info.get('open')
-        change = price - prev_close if price is not None and prev_close is not None else None
-        change_percent = (change / prev_close) if change is not None and prev_close != 0 else None
-        day_range = f"${info.get('regularMarketDayLow'):,.2f} - ${info.get('regularMarketDayHigh'):,.2f}" if info.get('regularMarketDayLow') and info.get('regularMarketDayHigh') else "N/A"
-        wk_range = f"${info.get('fiftyTwoWeekLow'):,.2f} - ${info.get('fiftyTwoWeekHigh'):,.2f}" if info.get('fiftyTwoWeekLow') and info.get('fiftyTwoWeekHigh') else "N/A"
-        description = alias_map.get(ticker) or info.get('longName', ticker)
-        rows.append((description, price, change, change_percent, day_range, wk_range, ticker))
+            price = info.get('lastPrice') or info.get('currentPrice') or info.get('regularMarketPrice')
+            prev_close = info.get('regularMarketPreviousClose') or info.get('previousClose') or info.get('open')
+            change = price - prev_close if price is not None and prev_close is not None else None
+            change_percent = (change / prev_close) if change is not None and prev_close != 0 else None
+            day_range = f"${info.get('regularMarketDayLow'):,.2f} - ${info.get('regularMarketDayHigh'):,.2f}" if info.get('regularMarketDayLow') and info.get('regularMarketDayHigh') else "N/A"
+            wk_range = f"${info.get('fiftyTwoWeekLow'):,.2f} - ${info.get('fiftyTwoWeekHigh'):,.2f}" if info.get('fiftyTwoWeekLow') and info.get('fiftyTwoWeekHigh') else "N/A"
+            description = alias_map.get(ticker) or info.get('longName', ticker)
+            rows.append((description, price, change, change_percent, day_range, wk_range, ticker))
 
-    table = Table(title="Ticker Overview", show_header=True, header_style="bold magenta")
-    table.add_column("Description", style="dim", width=30)
-    table.add_column("Price", justify="right")
-    table.add_column("Change", justify="right")
-    table.add_column("% Change", justify="right")
-    table.add_column("Day's Range", justify="right")
-    table.add_column("52-Wk Range", justify="right")
-    table.add_column("Ticker", style="dim")
+        table = Table(title="Ticker Overview", show_header=True, header_style="bold magenta")
+        table.add_column("Description", style="dim", width=30)
+        table.add_column("Price", justify="right")
+        table.add_column("Change", justify="right")
+        table.add_column("% Change", justify="right")
+        table.add_column("Day's Range", justify="right")
+        table.add_column("52-Wk Range", justify="right")
+        table.add_column("Ticker", style="dim")
 
-    for desc, price, change, pct, day_r, wk_r, symbol in rows:
-        price_text = f"${price:,.2f}" if price is not None else "N/A"
-        style, change_text, pct_text = ("dim", "N/A", "N/A")
-        if change is not None and pct is not None:
-            if change > 0: style, change_text, pct_text = "green", f"{change:,.2f}", f"+{pct:.2%}"
-            elif change < 0: style, change_text, pct_text = "red", f"{change:,.2f}", f"{pct:.2%}"
-            else: style, change_text, pct_text = "", "0.00", "0.00%"
-        table.add_row(desc, Text(price_text, style="cyan"), Text(change_text, style=style), Text(pct_text, style=style), day_r, wk_r, symbol)
+        for desc, price, change, pct, day_r, wk_r, symbol in rows:
+            price_text = f"${price:,.2f}" if price is not None else "N/A"
+            style, change_text, pct_text = ("dim", "N/A", "N/A")
+            if change is not None and pct is not None:
+                if change > 0: style, change_text, pct_text = "green", f"{change:,.2f}", f"+{pct:.2%}"
+                elif change < 0: style, change_text, pct_text = "red", f"{change:,.2f}", f"{pct:.2%}"
+                else: style, change_text, pct_text = "", "0.00", "0.00%"
+            table.add_row(desc, Text(price_text, style="cyan"), Text(change_text, style=style), Text(pct_text, style=style), day_r, wk_r, symbol)
 
-    console.print(table)
+        console.print(table)
 
     # --- FRED Data Section ---
     if fred_requested:
