@@ -26,6 +26,15 @@ A fast, minimalist terminal app for checking stock prices, crypto, news, and his
 *   **News That Matters**
     See the latest headlines per ticker or a combined feed — no ads, no autoplay videos, just info.
 
+*   **Economic Data (FRED)**
+    Monitor key economic indicators directly with integration for St. Louis Fed (FRED) data. Track GDP, Unemployment, CPI, and more with rolling averages and Z-score trend analysis.
+
+*   **Deep Market Context**
+    View comprehensive asset details including All Time High (ATH), % Off ATH, PE Ratio, Market Cap, and historical performance charts.
+
+*   **Quick Actions & Open Mode**
+    Instantly edit ticker aliases and notes with `e`. Use "Open Mode" (`o`) to quickly jump to external resources or switch between news, history, and options.
+
 *   **Keyboard-Friendly, Mouse-Optional**
     Navigate everything with Vim-style keys or arrow keys. Bonus: lots of helpful keybindings, fully documented.
 
@@ -99,35 +108,40 @@ stockstui --man       # Full user manual
 
 ### 💡 Command-Line Examples
 
+Open on Tesla's History tab.
 ```bash
 stockstui --history TSLA
 ```
 
-Open on Tesla's History tab.
-
+Get combined news for NVIDIA and AMD.
 ```bash
 stockstui --news "NVDA,AMD"
 ```
 
-Get combined news for NVIDIA and AMD.
-
+Open on Apple's Options tab to view the options chain.
 ```bash
 stockstui --options AAPL
 ```
 
-Open on Apple's Options tab to view the options chain.
-
+Create a temporary watchlist for this session only.
 ```bash
 stockstui --session-list "EV Stocks=TSLA,RIVN,LCID"
 ```
 
-Create a temporary watchlist for this session only.
-
+Launch a 5-day chart for Tesla.
 ```bash
 stockstui --history TSLA --period 5d --chart
 ```
 
-Launch a 5-day chart for Tesla.
+Open directly to a specific FRED economic series (e.g., Unemployment Rate).
+```bash
+stockstui --fred UNRATE
+```
+
+CLI mode: Output "stocks" list, filtered by the "tech" tag.
+```bash
+stockstui -o stocks --tags tech
+```
 
 ---
 
