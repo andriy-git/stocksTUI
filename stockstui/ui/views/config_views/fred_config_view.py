@@ -21,23 +21,22 @@ class FredConfigView(ScrollableContainer):
 
     def compose(self) -> ComposeResult:
         """Creates the layout for the FRED configuration view."""
-        with Vertical():
-            # Top section for API Key
-            yield Label("FRED Settings", classes="config-header")
-            with Horizontal(classes="config-option-horizontal"):
-                yield Label("API Key:", classes="config-label")
-                yield Input(id="fred-api-key-input", password=True, placeholder="Enter FRED API Key")
-                yield Button("Save", id="save-fred-api-key")
+        # Top section for API Key
+        yield Label("FRED Settings", classes="config-header")
+        with Horizontal(classes="config-option-horizontal"):
+            yield Label("API Key:", classes="config-label")
+            yield Input(id="fred-api-key-input", password=True, placeholder="Enter FRED API Key")
+            yield Button("Save", id="save-fred-api-key")
 
-            # Series management section (modeled after ticker management)
-            yield Label("Series Management", classes="config-header-small")
-            yield DataTable(id="fred-series-table", zebra_stripes=True)
-            with Vertical(id="fred-series-buttons"):
-                yield Button("Add Series", id="add-fred-series")
-                yield Button("Edit Series", id="edit-fred-series")
-                yield Button("Remove Series", id="remove-fred-series", variant="error")
-                yield Button("Move Up", id="move-fred-series-up")
-                yield Button("Move Down", id="move-fred-series-down")
+        # Series management section (modeled after ticker management)
+        yield Label("Series Management", classes="config-header-small")
+        yield DataTable(id="fred-series-table", zebra_stripes=True)
+        with Vertical(id="fred-series-buttons"):
+            yield Button("Add Series", id="add-fred-series")
+            yield Button("Edit Series", id="edit-fred-series")
+            yield Button("Remove Series", id="remove-fred-series", variant="error")
+            yield Button("Move Up", id="move-fred-series-up")
+            yield Button("Move Down", id="move-fred-series-down")
 
     def on_mount(self) -> None:
         """Called when the view is mounted."""
