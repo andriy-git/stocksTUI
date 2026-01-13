@@ -147,6 +147,15 @@ CONFIGURATION
 
     These files can be safely deleted to reset caches or configuration.
 
+FRED API KEY
+    To use the Economic Data (FRED) features, you must provide a free API key 
+    from the Federal Reserve Bank of St. Louis. 
+
+    You can request a free API key at:
+    https://fred.stlouisfed.org/docs/api/fred/v2/index.html
+
+    Once obtained, enter the key in the application under Configs > FRED Settings.
+
 PRICE COLUMNS
     When viewing price data for stocks or crypto, the following columns can be 
     displayed (visibility is configurable in Configs > Watchlists):
