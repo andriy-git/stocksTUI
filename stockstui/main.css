@@ -168,7 +168,8 @@ DataTable>Header {
 
 /* Styling for ListView and DataTable within config */
 #symbol-list-view,
-#ticker-table {
+#ticker-table,
+#fred-series-table {
   height: 10;
   /* Fixed height */
   border: none;
@@ -184,7 +185,8 @@ DataTable>Header {
 
 /* Button containers for list and ticker management */
 #list-buttons,
-#ticker-buttons-container {
+#ticker-buttons-container,
+#fred-series-buttons {
   height: auto;
   layout: vertical;
   padding-top: 0;
