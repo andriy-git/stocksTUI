@@ -1,5 +1,5 @@
 # Change Log
-## [0.1.0-b11] UNDETERMINED
+## [0.1.0-b11] 2026-01-13
 
 ### Added
 -   `feat(fred)`: Add FRED data provider with caching and API integration
