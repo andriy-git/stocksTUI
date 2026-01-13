@@ -2,7 +2,9 @@
 
 A fast, minimalist terminal app for checking stock prices, crypto, news, and historical charts — without leaving your shell. Built with [Textual](https://github.com/textualize/textual), powered by [yfinance](https://github.com/ranaroussi/yfinance), and made for people who prefer the command line over CNBC.
 
-![stocksTUI Screenshot](https://raw.githubusercontent.com/andriy-git/stocksTUI/main/assets/screenshot.png)
+![stocksTUI Screenshot - Main Interface](https://raw.githubusercontent.com/andriy-git/stocksTUI/main/assets/com.png)
+![stocksTUI Screenshot - CLI Mode](https://raw.githubusercontent.com/andriy-git/stocksTUI/main/assets/cli.png)
+![stocksTUI Screenshot - FRED Data](https://raw.githubusercontent.com/andriy-git/stocksTUI/main/assets/fred.png)
 
 ---
 
@@ -144,6 +146,14 @@ stockstui -o stocks --tags tech
 ```
 
 ---
+
+## 🔑 FRED API Key
+
+To use the Economic Data (FRED) features, you must provide a free API key from the Federal Reserve Bank of St. Louis.
+
+1.  Create a free account and request an API key at [fred.stlouisfed.org](https://fred.stlouisfed.org/docs/api/fred/v2/index.html).
+2.  Once you have your key, enter it in the app under **Configs > FRED Settings**.
+3.  Click **Save** to enable FRED data fetching.
 
 ## ⌨️ Keybindings
 
