@@ -30,7 +30,17 @@ else
   python3 -m venv "$VENV_DIR"
 fi
 
-# 2. Install dependencies from pyproject.toml in editable mode
+# 2. Ensure pip is available and upgraded in the virtual environment
+echo "Ensuring pip is available in the virtual environment..."
+if ! "$VENV_DIR/bin/python" -m pip --version >/dev/null 2>&1; then
+    echo "Pip not found in virtual environment, installing/upgrading pip..."
+    "$VENV_DIR/bin/python" -m ensurepip --upgrade
+fi
+
+# Upgrade pip to latest version to ensure compatibility
+"$VENV_DIR/bin/python" -m pip install --upgrade pip
+
+# Install dependencies from pyproject.toml in editable mode
 echo "Installing project in editable mode..."
 "$VENV_DIR/bin/pip" install -e .
 
