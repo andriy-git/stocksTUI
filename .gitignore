@@ -16,3 +16,5 @@ run.sh
 .coverage
 .hypothesis/
 mutants/
+.mypy_cache/
+.ruff_cache/
