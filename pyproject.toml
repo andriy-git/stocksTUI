@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "stocksTUI"
-version = "0.1.0-b10"
+version = "0.1.0-b12"
 authors = [
   { name="Andriy", email="project-git@techie.com" },
 ]
@@ -81,3 +81,8 @@ include = ["stockstui*"]
 
 [tool.setuptools.package-data]
 "stockstui" = ["**/*.json", "**/*.css", "**/*.txt"]
+ 
+[tool.mutmut]
+paths_to_mutate = "stockstui/presentation/formatter.py"
+tests_dir = "tests/test_formatter.py"
+runner = "python -m unittest tests/test_formatter.py"
