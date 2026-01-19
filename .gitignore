@@ -12,5 +12,7 @@ run.sh
 /build/
 /*.egg-info/
 
-# Test coverage
+# Testing
 .coverage
+.hypothesis/
+mutants/
