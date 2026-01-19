@@ -14,11 +14,14 @@
 # --- Script Start ---
 
 # Activate virtual environment if it exists
-if [ -d "venv" ]; then
-    echo "Activating virtual environment..."
+if [ -d ".venv" ]; then
+    echo "Activating virtual environment (.venv)..."
+    source .venv/bin/activate
+elif [ -d "venv" ]; then
+    echo "Activating virtual environment (venv)..."
     source venv/bin/activate
 else
-    echo "Warning: No 'venv' directory found. Assuming dependencies are in the global scope."
+    echo "Warning: No virtual environment directory found. Assuming dependencies are in the global scope."
 fi
 
 # Ensure dev dependencies are installed
