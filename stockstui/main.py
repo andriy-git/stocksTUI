@@ -1177,7 +1177,7 @@ class StocksTUI(App):
         from stockstui.data_providers import fred_provider
         start_time = time.perf_counter()
 
-        data = []
+        data: list[dict[str, Any]] = []
         for series_id in series_list:
             try:
                 # Check if API key is configured
