@@ -2144,7 +2144,7 @@ class StocksTUI(App):
             self._sort_mode = True
             try:
                 status_label = self.query_one("#last-refresh-time", Label)
-                self._original_status_text = status_label.renderable
+                self._original_status_text = getattr(status_label, "renderable", "")
                 if category == "history":
                     status_label.update(
                         "SORT BY: \\[d]ate, \\[o]pen, \\[H]igh, \\[L]ow, \\[c]lose, \\[v]olume, \\[ESC]ape"
@@ -2230,7 +2230,7 @@ class StocksTUI(App):
                 if price_table.cursor_row >= 0:
                     self._open_mode = True
                     status_label = self.query_one("#last-refresh-time", Label)
-                    self._original_status_text = status_label.renderable
+                    self._original_status_text = getattr(status_label, "renderable", "")
                     status_label.update(
                         "OPEN IN: \\[n]ews, \\[h]istory, \\[o]ptions, \\[y]ahoo Finance, \\[ESC]ape"
                     )
@@ -2508,7 +2508,7 @@ class StocksTUI(App):
         # Update filter status after refresh
         self._update_tag_filter_status()
 
-    def _redisplay_price_table(self):
+    def _redisplay_price_table(self) -> None:
         """Re-draws the price table using only data from the in-memory cache."""
         try:
             dt = self.query_one("#price-table", DataTable)
