@@ -1,4 +1,16 @@
 # Change Log
+
+## [0.1.0-b12] 2026-01-19 
+
+### Changed
+-   `chore(deps)`: Updated minimum Python version requirement from 3.9 to 3.10
+-   `chore(build)`: Enhanced virtual environment detection to support both .venv and venv directories
+-   `chore(ci)`: Major CI and formatting update across the entire codebase
+
+### Fixed
+-   `fix(oi_chart)`: Fixed potential crash in options interest chart due to type checking issues
+-   `fix(install)`: Fixed installation script to handle missing pip in virtual environments
+
 ## [0.1.0-b11] 2026-01-13
 
 ### Added
@@ -11,7 +23,7 @@
 -   `feat(fred)`: Add FRED data output support in CLI mode (-o fred)
 -   `feat(fred)`: Add FRED series browser opening functionality (o key) and Enter key editing
 -   `feat(fred)`: Add dedicated AddFredSeriesModal and increase observation limits
--   `feat(cli)`: Add support for tag filtering in CLI mode via `--tags`
+-   `feat(cli)`: Add support for tag filtering in CLI mode via \`--tags\`
 -   `feat(ui)`: Hide "Portfolios" button from Main Settings to focus on core features
 -   `feat(ui)`: Implement dynamic theme-aware colors for charts and CLI headers (replace hardcoded colors)
 -   `feat(ui)`: Add Enter key action handling for DataTable selections across views
@@ -61,11 +73,11 @@
 -   `feat(options)`: Implemented options Greeks calculation (Delta, Gamma, Theta, Vega) using Black-Scholes model
 -   `feat(options)`: Added option position tracking with quantity and average cost management
 -   `feat(options)`: Created interactive Open Interest bar chart visualization for calls and puts
--   `feat(ui)`: Introduced 'Open Mode' allowing users to quickly navigate from price tables to news, history, or options views using `o`, `n`, `h` keys
--   `feat(ui)`: Added quick edit modal for ticker aliases, notes, and tags accessible with `e` key in price tables
+-   `feat(ui)`: Introduced 'Open Mode' allowing users to quickly navigate from price tables to news, history, or options views using \`o\`, \`n\`, \`h\` keys
+-   `feat(ui)`: Added quick edit modal for ticker aliases, notes, and tags accessible with \`e\` key in price tables
 -   `feat(ui)`: Added position management modal for options with quantity and cost tracking
 -   `feat(ui)`: Implemented toggle between table and chart views in options view
--   `feat(ui)`: Added keyboard shortcuts for navigating expiration dates (`[` and `]`) in options view
+-   `feat(ui)`: Added keyboard shortcuts for navigating expiration dates (\`[\` and \`]\`) in options view
 -   `feat(ui)`: Created new 'options' tab in main application with dedicated UI components
 -   `feat(data)`: Added options data provider with caching mechanism and yfinance integration
 -   `feat(db)`: Added option_positions table to SQLite database with CRUD operations
@@ -128,32 +140,32 @@
 
 ### Fixed
 -   `fix(core)`: Prevent crash on shutdown by handling logging race condition.
--   `fix(cache)`: Correct cache expiry logic to prevent using stale `previous_close` values.
+-   `fix(cache)`: Correct cache expiry logic to prevent using stale \`previous_close\` values.
 -   `fix(ux)`: Hidden tabs are now properly excluded from symbol listings, tag filtering, and alias mapping throughout the application.
 
 ### Test
 -   `test(suite)`: Added a comprehensive test suite covering the application's core logic, data providers, database, and UI components.
 -   `test(ci)`: Implemented a GitHub Actions CI workflow to run tests, linting, and type checking automatically.
--   `test(runner)`: Added a `run_tests.sh` script for convenient local test execution with coverage reporting.
+-   `test(runner)`: Added a \`run_tests.sh\` script for convenient local test execution with coverage reporting.
 -   `test(cache)`: Add unit test to verify cache invalidation across market sessions.
 
 ## [0.1.0-b5] 2025-07-22
 
 ### Added
 -   `feat(config)`: Implemented a multi-window layout for the "Configs" tab, separating General Settings, Watchlists, and Portfolios into distinct views.
--   `feat(ux)`: The `backspace` key can now be used for hierarchical "back" navigation within the nested menus of the Configs tab.
+-   `feat(ux)`: The \`backspace\` key can now be used for hierarchical "back" navigation within the nested menus of the Configs tab.
 -   `feat(ux)`: Implemented a smart, self-adjusting refresh mechanism for the market status, polling more frequently around market open/close and less frequently during off-hours.
 -   `feat(ux)`: The tag filtering widget is now available on all ticker list tabs (e.g., 'crypto', 'indices').
--   `feat(ux)`: The tag filter panel can now be toggled on and off using the `f` key, preserving filter state while hidden.
+-   `feat(ux)`: The tag filter panel can now be toggled on and off using the \`f\` key, preserving filter state while hidden.
 
 ### Changed
 -   `refactor(config)`: Refactored the entire configuration tab to use the Container View Pattern for better organization and scalability.
 -   `refactor(ux)`: Decoupled UI filtering from network refreshing, making tag filtering an instantaneous, local operation.
 
 ### Fixed
--   `fix(ux)`: The user-defined order of tickers is now correctly preserved during data refreshes, filtering, and in the command-line `--output` mode.
+-   `fix(ux)`: The user-defined order of tickers is now correctly preserved during data refreshes, filtering, and in the command-line \`--output\` mode.
 -   `fix(ux)`: Cursor position in the main price table is now preserved across data refreshes and correctly resets only when filters are applied.
--   `fix(core)`: Implemented worker cancellation checks to prevent `RuntimeError` crashes during application shutdown.
+-   `fix(core)`: Implemented worker cancellation checks to prevent \`RuntimeError\` crashes during application shutdown.
 
 ### Docs
 -   `docs`: README and manual updated
@@ -165,46 +177,46 @@ A special thanks to contributor **[@klahrich](https://github.com/klahrich)** for
 
 #### Added
 -   **Full-featured Portfolio Management system:**
-  -   A new `portfolios.json` config file to define and persist portfolios.
-  -   A dedicated `PortfolioManager` to handle all backend logic (CRUD operations).
-  -   Automatic migration of existing `stocks` list into a "Default Portfolio" on first run for a seamless user transition.
+  -   A new \`portfolios.json\` config file to define and persist portfolios.
+  -   A dedicated \`PortfolioManager\` to handle all backend logic (CRUD operations).
+  -   Automatic migration of existing \`stocks\` list into a "Default Portfolio" on first run for a seamless user transition.
   -   New modals in the Config screen to create, rename, and delete portfolios.
 -   **Comprehensive Tagging and Filtering System:**
   -   Ability to add multiple, space- or comma-separated tags to any ticker in the Config screen.
-  -   New `TagFilterWidget` appears at the top of price views, allowing users to filter the visible tickers by clicking one or more tag buttons.
+  -   New \`TagFilterWidget\` appears at the top of price views, allowing users to filter the visible tickers by clicking one or more tag buttons.
   -   A "Clear" button to quickly remove all active tag filters.
   -   A status label that shows how many tickers are being shown out of the total available (e.g., "Showing 5 of 20").
 
 #### Changed
--   The `Config` view has been significantly updated to support portfolio and tag management.
+-   The \`Config\` view has been significantly updated to support portfolio and tag management.
 -   The "Add/Edit Ticker" modals now include a field for "Tags".
--   The `yfinance` dependency requirement was relaxed from `~=` to `>=` to allow for newer patch versions.
+-   The \`yfinance\` dependency requirement was relaxed from \`~=\` to \`>=\` to allow for newer patch versions.
 
 ## [0.1.0-b4] 2025-07-15
 
 ### Added
--   `feat(cli)`: Added `-o/--output` flag to display stock data directly in the terminal without launching the TUI
+-   `feat(cli)`: Added a \`-o/--output\` flag to display stock data directly in the terminal without launching the TUI
 -   `feat(cli)`: Supported optional watchlist filtering and session lists in CLI output mode
 
 ### Fix
 -   `fix(ui)`: Prevented crash on duplicate tickers in "all" tab by duplicating ticker lists
 
 ### Docs
--   `docs(readme, cli)`: Updated help documentation to include `--output` flag and clarify TUI view options
--   `docs(changelog)`: Updated `CHANGELOG.md` to include recent feature additions
+-   `docs(readme, cli)`: Updated help documentation to include \`--output\` flag and clarify TUI view options
+-   `docs(changelog)`: Updated \`CHANGELOG.md\` to include recent feature additions
 
 ## [0.1.0-b3] 2025-07-14
 
 ### Added
--   `feat(cli)`: Added a `--man` flag to display a detailed, man-page-style user guide.
+-   `feat(cli)`: Added a \`--man\` flag to display a detailed, man-page-style user guide.
 -   `feat(debug)`: Debug test isolation for accurate measurements
--   `feat(ux)`: Smart refresh system (`r` vs `R` keybindings)
+-   `feat(ux)`: Smart refresh system (\`r\` vs \`R\` keybindings)
 -   `feat(news)`: Added support for viewing a combined news feed for multiple tickers, sorted by publication time
--   `feat(cache)`: Implemented persistent SQLite cache (`app_cache.db`) for price/ticker metadata
+-   `feat(cache)`: Implemented persistent SQLite cache (\`app_cache.db\`) for price/ticker metadata
 -   `feat(cache)`: Added market-aware cache expiration to optimize API usage
 -   `feat(cli)`: Implemented CLI argument parsing for launching into specific views
 -   `feat(logs)`: Added in-app notifications for WARNING/ERROR log messages
--   `feat(logs)`: Added file logger (`stockstui.log`) for debug information
+-   `feat(logs)`: Added file logger (\`stockstui.log\`) for debug information
 
 ### Changed
 -   `refactor(ux)`: Simplified price comparison data handling to update after table population
@@ -213,7 +225,7 @@ A special thanks to contributor **[@klahrich](https://github.com/klahrich)** for
 -   `refactor(cli)`: Dynamically load app version from package metadata
 -   `refactor(cache)`: Converted caching to timezone-aware UTC datetimes
 -   `refactor(config)`: Relocated config/cache files to OS-appropriate directories
--   `refactor(cli)`: Enhanced `--news` to support multiple comma-separated tickers
+-   `refactor(cli)`: Enhanced \`--news\` to support multiple comma-separated tickers
 
 ### Fixed
 -   `fix(ui)`: Prevented crash when switching tabs during price cell flash animation
@@ -222,14 +234,14 @@ A special thanks to contributor **[@klahrich](https://github.com/klahrich)** for
 -   `fix(cache)`: Ensured live price updates are saved to session cache, maintaining consistent prices when switching tabs
 -   `fix(formatter)`: Restored user-defined aliases in the price table, prioritizing custom names over default descriptions
 -   `fix(cache)`: Standardized cache structure to prevent TypeErrors
--   `fix(provider)`: Prioritized `fast_info` for real-time data accuracy
+-   `fix(provider)`: Prioritized \`fast_info\` for real-time data accuracy
 -   `fix(core)`: Improved stability with better DB transaction handling
--   `fix(core)`: Ensured atomic config saves using `os.replace`
+-   `fix(core)`: Ensured atomic config saves using \`os.replace\`
 -   `fix(ux)`: Guaranteed data refresh on tab switch with accurate timestamps
 -   `fix(ui)`: Corrected source ticker styling in multi-news view
 -   `fix(news)`: Hardened link-parsing regex against special characters
 -   `fix(debug)`: Fixed test button re-enabling after modal cancellation
--   `fix(history)`: Added CLI argument handling for `--chart` and `--period`
+-   `fix(history)`: Added CLI argument handling for \`--chart\` and \`--period\`
 -   `fix(css)`: Fixed scrollbar in config visible tabs container
 -   `fix(logs)`: Implemented thread-safe logging
 
@@ -246,8 +258,8 @@ A special thanks to contributor **[@klahrich](https://github.com/klahrich)** for
 
 ### Docs
 
--   `docs(readme, cli)`: Updated `README.md` to recommend `pipx` installation with setup instructions
--   `docs(readme, cli)`: Added disclaimer in `README.md` and help command requiring tickers in Yahoo Finance format
+-   `docs(readme, cli)`: Updated \`README.md\` to recommend \`pipx\` installation with setup instructions
+-   `docs(readme, cli)`: Added disclaimer in \`README.md\` and help command requiring tickers in Yahoo Finance format
 
 ## [0.1.0-b1] - 2025-07-11
 
@@ -260,7 +272,7 @@ A special thanks to contributor **[@klahrich](https://github.com/klahrich)** for
 
 -   `fix(config)`: Use atomic writes for config files to prevent data loss.
 -   `fix(config)`: Eliminate risk of infinite loops during config loading.
--   `fix(config)`: Backup corrupted config files as `.bak` to allow manual recovery.
+-   `fix(config)`: Backup corrupted config files as .bak to allow manual recovery.
 -   `fix(news)`: Show clear error messages in the Markdown widget for invalid tickers or network issues.
 -   `fix(news)`: Provide actionable feedback if no web browser is configured when opening external links.
 -   `fix(debug)`: Prevent race conditions by disabling test buttons on start and restoring them on modal cancel.
@@ -269,8 +281,8 @@ A special thanks to contributor **[@klahrich](https://github.com/klahrich)** for
 
 ### Changed
 
--   `refactor(provider)`: Replace broad `except Exception` with targeted exception handling for network, data, and validation errors.
--   `refactor(cli)`: Modernize command-line help display to use `subprocess` for better robustness.
+-   `refactor(provider)`: Replace broad \`except Exception\` with targeted exception handling for network, data, and validation errors.
+-   `refactor(cli)`: Modernize command-line help display to use \`subprocess\` for better robustness.
 
 ### Docs
 
@@ -279,10 +291,10 @@ A special thanks to contributor **[@klahrich](https://github.com/klahrich)** for
 
 ### Build
 
--   `build(packaging)`: Configured the project for PyPI distribution with a `pyproject.toml` and restructured the source layout.
--   `build(install)`: Reworked `install.sh` to use `pip install -e .` for a standard, editable development setup.
+-   `build(packaging)`: Configured the project for PyPI distribution with a \`pyproject.toml\` and restructured the source layout.
+-   `build(install)`: Reworked \`install.sh\` to use \`pip install -e .\` for a standard, editable development setup.
 
 ## [0.1.0-beta.0] - 2025-07-08
 
 -   Initial pre-release.
--   Many foundational changes; changelog entries begin from `0.1.0-beta.1`.
+-   Many foundational changes; changelog entries begin from \`0.1.0-beta.1\`.
