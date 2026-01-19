@@ -1,26 +1,47 @@
 import unittest
 from unittest.mock import MagicMock, AsyncMock
 from textual.app import App
-from textual.widgets import ListView, DataTable, Button, Switch, ListItem
+from textual.widgets import ListView, DataTable, Button, Switch
 
 from stockstui.ui.views.config_views.lists_config_view import ListsConfigView
 
 
 class ListsConfigViewTestApp(App):
     """App wrapper for testing ListsConfigView."""
+
     def __init__(self):
         super().__init__()
         self.config = MagicMock()
         # Mock lists for testing
         self.config.lists = {
             "stocks": [
-                {"ticker": "AAPL", "alias": "Apple", "note": "Tech stock", "tags": "tech"},
-                {"ticker": "GOOGL", "alias": "Google", "note": "Search engine", "tags": "tech"}
+                {
+                    "ticker": "AAPL",
+                    "alias": "Apple",
+                    "note": "Tech stock",
+                    "tags": "tech",
+                },
+                {
+                    "ticker": "GOOGL",
+                    "alias": "Google",
+                    "note": "Search engine",
+                    "tags": "tech",
+                },
             ],
             "crypto": [
-                {"ticker": "BTC-USD", "alias": "Bitcoin", "note": "Digital currency", "tags": "crypto"},
-                {"ticker": "ETH-USD", "alias": "Ethereum", "note": "Blockchain platform", "tags": "crypto"}
-            ]
+                {
+                    "ticker": "BTC-USD",
+                    "alias": "Bitcoin",
+                    "note": "Digital currency",
+                    "tags": "crypto",
+                },
+                {
+                    "ticker": "ETH-USD",
+                    "alias": "Ethereum",
+                    "note": "Blockchain platform",
+                    "tags": "crypto",
+                },
+            ],
         }
         self.cli_overrides = {}
         self.active_list_category = "stocks"
@@ -29,14 +50,16 @@ class ListsConfigViewTestApp(App):
             "success": "green",
             "error": "red",
             "warning": "yellow",
-            "accent": "blue"
+            "accent": "blue",
         }
         # Mock methods that might be called
-        self.config.get_setting = MagicMock(return_value=[
-            {"key": "symbol", "visible": True},
-            {"key": "price", "visible": True},
-            {"key": "change", "visible": False}
-        ])
+        self.config.get_setting = MagicMock(
+            return_value=[
+                {"key": "symbol", "visible": True},
+                {"key": "price", "visible": True},
+                {"key": "change", "visible": False},
+            ]
+        )
         self.config.save_lists = MagicMock()
         self.config.save_settings = MagicMock()
         self.notify = MagicMock()
@@ -52,16 +75,16 @@ class TestListsConfigView(unittest.IsolatedAsyncioTestCase):
     async def test_initial_state(self):
         """Test initial UI state on mount."""
         app = ListsConfigViewTestApp()
-        async with app.run_test() as pilot:
+        async with app.run_test():
             view = app.query_one(ListsConfigView)
-            
+
             # Check that the list view and ticker table exist
             list_view = view.query_one("#symbol-list-view", ListView)
             ticker_table = view.query_one("#ticker-table", DataTable)
-            
+
             # Should have populated the list view with categories
             self.assertEqual(len(list_view.children), 2)  # stocks and crypto
-            
+
             # Should have populated the ticker table with active category's tickers
             self.assertEqual(ticker_table.row_count, 2)  # AAPL and GOOGL
 
@@ -70,11 +93,11 @@ class TestListsConfigView(unittest.IsolatedAsyncioTestCase):
         app = ListsConfigViewTestApp()
         app.config.lists = {}
         app.active_list_category = None
-        
-        async with app.run_test() as pilot:
+
+        async with app.run_test():
             view = app.query_one(ListsConfigView)
             view.repopulate_lists()
-            
+
             # Should handle empty lists without error
             list_view = view.query_one("#symbol-list-view", ListView)
             self.assertEqual(len(list_view.children), 0)
@@ -98,31 +121,31 @@ class TestListsConfigView(unittest.IsolatedAsyncioTestCase):
     async def test_repopulate_ticker_table(self):
         """Test repopulating the ticker table."""
         app = ListsConfigViewTestApp()
-        
-        async with app.run_test() as pilot:
+
+        async with app.run_test():
             view = app.query_one(ListsConfigView)
-            
+
             # Initially active category is stocks with 2 tickers
             ticker_table = view.query_one("#ticker-table", DataTable)
             self.assertEqual(ticker_table.row_count, 2)
-            
+
             # Change active category and repopulate
             app.active_list_category = "crypto"
             view._populate_ticker_table()
-            
+
             # Should now show only crypto tickers
             self.assertEqual(ticker_table.row_count, 2)
 
     async def test_update_list_highlight(self):
         """Test updating the highlight for active list."""
         app = ListsConfigViewTestApp()
-        
-        async with app.run_test() as pilot:
+
+        async with app.run_test():
             view = app.query_one(ListsConfigView)
-            
+
             # Initially should highlight the active category
             view._update_list_highlight()
-            
+
             # Check that the active list item has the correct class
             list_view = view.query_one("#symbol-list-view", ListView)
             # The first item should be highlighted as active
@@ -342,7 +365,7 @@ class TestListsConfigView(unittest.IsolatedAsyncioTestCase):
         # Mock the _rebuild_app method to be async
         app._rebuild_app = AsyncMock()
 
-        async with app.run_test() as pilot:
+        async with app.run_test():
             view = app.query_one(ListsConfigView)
 
             # Set active category to one that can be moved
@@ -358,7 +381,7 @@ class TestListsConfigView(unittest.IsolatedAsyncioTestCase):
         """Test moving tickers up and down."""
         app = ListsConfigViewTestApp()
 
-        async with app.run_test() as pilot:
+        async with app.run_test():
             view = app.query_one(ListsConfigView)
 
             # Ensure a category is selected
@@ -374,11 +397,10 @@ class TestListsConfigView(unittest.IsolatedAsyncioTestCase):
         """Test handling list selection."""
         app = ListsConfigViewTestApp()
 
-        async with app.run_test() as pilot:
+        async with app.run_test():
             view = app.query_one(ListsConfigView)
 
             # Create a mock event for list selection
-            from textual.widgets import ListItem
             # Create a list item with a name property
             class MockListItem:
                 def __init__(self, name):
@@ -422,31 +444,31 @@ class TestListsConfigView(unittest.IsolatedAsyncioTestCase):
     async def test_on_column_visibility_changed(self):
         """Test handling column visibility changes."""
         app = ListsConfigViewTestApp()
-        
+
         # Mock the config to return column settings
-        app.config.get_setting = MagicMock(return_value=[
-            {"key": "col1", "visible": True}
-        ])
+        app.config.get_setting = MagicMock(
+            return_value=[{"key": "col1", "visible": True}]
+        )
         app.config.settings = {"column_settings": [{"key": "col1", "visible": True}]}
-        
-        async with app.run_test() as pilot:
+
+        async with app.run_test():
             view = app.query_one(ListsConfigView)
-            
+
             # Repopulate columns first
             view.repopulate_columns()
-            
+
             # Create a mock switch and event
             switch = view.query_one(".column-switch", Switch)
             switch.value = False  # Change to False
-            
+
             # Create a mock event
             class MockEvent:
                 def __init__(self, switch):
                     self.switch = switch
                     self.value = False
-            
+
             mock_event = MockEvent(switch)
-            
+
             # Call the handler
             view.on_column_visibility_changed(mock_event)
 
@@ -454,7 +476,7 @@ class TestListsConfigView(unittest.IsolatedAsyncioTestCase):
         """Test keyboard navigation."""
         app = ListsConfigViewTestApp()
 
-        async with app.run_test() as pilot:
+        async with app.run_test():
             view = app.query_one(ListsConfigView)
 
             # Create a mock key event with required methods
@@ -489,7 +511,7 @@ class TestListsConfigView(unittest.IsolatedAsyncioTestCase):
         # Mock the _rebuild_app method to be async
         app._rebuild_app = AsyncMock()
 
-        async with app.run_test() as pilot:
+        async with app.run_test():
             view = app.query_one(ListsConfigView)
 
             # Test with confirmed deletion
@@ -501,26 +523,30 @@ class TestListsConfigView(unittest.IsolatedAsyncioTestCase):
     async def test_on_column_highlighted(self):
         """Test column highlighting."""
         app = ListsConfigViewTestApp()
-        
+
         # Mock the config to return column settings
-        app.config.get_setting = MagicMock(return_value=[
-            {"key": "col1", "visible": True}
-        ])
-        
-        async with app.run_test() as pilot:
+        app.config.get_setting = MagicMock(
+            return_value=[{"key": "col1", "visible": True}]
+        )
+
+        async with app.run_test():
             view = app.query_one(ListsConfigView)
-            
+
             # Repopulate columns first
             view.repopulate_columns()
-            
+
             # Create a mock event for column highlighting
             class MockEvent:
                 def __init__(self, control):
                     self.control = control
-                    self.item = view.query_one("#columns-list-view", ListView).children[0] if view.query_one("#columns-list-view", ListView).children else None
-            
+                    self.item = (
+                        view.query_one("#columns-list-view", ListView).children[0]
+                        if view.query_one("#columns-list-view", ListView).children
+                        else None
+                    )
+
             mock_event = MockEvent(view.query_one("#columns-list-view", ListView))
-            
+
             # Call the handler
             view.on_column_highlighted(mock_event)
 
@@ -529,16 +555,20 @@ class TestListsConfigView(unittest.IsolatedAsyncioTestCase):
         app = ListsConfigViewTestApp()
 
         # Mock the config to return column settings
-        app.config.get_setting = MagicMock(return_value=[
-            {"key": "col1", "visible": True},
-            {"key": "col2", "visible": False}
-        ])
-        app.config.settings = {"column_settings": [
-            {"key": "col1", "visible": True},
-            {"key": "col2", "visible": False}
-        ]}
+        app.config.get_setting = MagicMock(
+            return_value=[
+                {"key": "col1", "visible": True},
+                {"key": "col2", "visible": False},
+            ]
+        )
+        app.config.settings = {
+            "column_settings": [
+                {"key": "col1", "visible": True},
+                {"key": "col2", "visible": False},
+            ]
+        }
 
-        async with app.run_test() as pilot:
+        async with app.run_test():
             view = app.query_one(ListsConfigView)
 
             # Repopulate columns first
@@ -559,7 +589,7 @@ class TestListsConfigView(unittest.IsolatedAsyncioTestCase):
         """Test row selection event."""
         app = ListsConfigViewTestApp()
 
-        async with app.run_test() as pilot:
+        async with app.run_test():
             view = app.query_one(ListsConfigView)
 
             # Ensure a category is selected and table has a row

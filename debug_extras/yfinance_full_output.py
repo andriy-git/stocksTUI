@@ -4,8 +4,9 @@ import yfinance as yf
 # Define column widths: [Info Key, Batch Fast, Ind. Fast, Batch Slow, Ind. Slow]
 COL_WIDTHS = [28, 18, 18, 18, 18]
 # Define column alignments: 'l' for left, 'r' for right
-COL_ALIGNMENTS = ['l', 'r', 'r', 'r', 'r']
+COL_ALIGNMENTS = ["l", "r", "r", "r", "r"]
 HEADERS = ["Info Key", "Batch Fast", "Ind. Fast", "Batch Slow", "Ind. Slow"]
+
 
 def format_row(items: list, widths: list[int], alignments: list[str]) -> str:
     """
@@ -24,15 +25,16 @@ def format_row(items: list, widths: list[int], alignments: list[str]) -> str:
 
         # 2. Truncate if the string is too long for the column
         if len(s) > widths[i]:
-            s = s[:widths[i] - 3] + "..."
-        
+            s = s[: widths[i] - 3] + "..."
+
         # 3. Align the string within its column width
-        if alignments[i] == 'r':
+        if alignments[i] == "r":
             formatted_items.append(s.rjust(widths[i]))
         else:
             formatted_items.append(s.ljust(widths[i]))
-            
+
     return " ".join(formatted_items)
+
 
 def compare_ticker_info(tickers_to_test: list[str]):
     """
@@ -55,7 +57,7 @@ def compare_ticker_info(tickers_to_test: list[str]):
         print("-" * sum(COL_WIDTHS) + "-" * (len(COL_WIDTHS) - 1))
         print(f"Ticker: {ticker}")
         print("-" * sum(COL_WIDTHS) + "-" * (len(COL_WIDTHS) - 1))
-        
+
         try:
             # Fetch all four data dictionaries
             batch_fast_info = batch_tickers.tickers[ticker].fast_info
@@ -65,11 +67,15 @@ def compare_ticker_info(tickers_to_test: list[str]):
             individual_slow_info = individual_ticker.info
 
             # Combine all unique keys
-            all_keys = sorted(list(
-                set(batch_fast_info.keys()) | set(individual_fast_info.keys()) |
-                set(batch_slow_info.keys()) | set(individual_slow_info.keys())
-            ))
-            
+            all_keys = sorted(
+                list(
+                    set(batch_fast_info.keys())
+                    | set(individual_fast_info.keys())
+                    | set(batch_slow_info.keys())
+                    | set(individual_slow_info.keys())
+                )
+            )
+
             # Print table header
             print(format_row(HEADERS, COL_WIDTHS, COL_ALIGNMENTS))
             print("=" * sum(COL_WIDTHS) + "=" * (len(COL_WIDTHS) - 1))
@@ -81,7 +87,7 @@ def compare_ticker_info(tickers_to_test: list[str]):
                     batch_fast_info.get(key),
                     individual_fast_info.get(key),
                     batch_slow_info.get(key),
-                    individual_slow_info.get(key)
+                    individual_slow_info.get(key),
                 ]
                 print(format_row(row_data, COL_WIDTHS, COL_ALIGNMENTS))
 
@@ -89,6 +95,7 @@ def compare_ticker_info(tickers_to_test: list[str]):
 
         except Exception as e:
             print(f"Could not process ticker {ticker}: {e}\n")
+
 
 if __name__ == "__main__":
     tickers = ["^VIX", "GC=F", "^FTW5000", "BTC-USD"]

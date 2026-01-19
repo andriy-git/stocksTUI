@@ -2,15 +2,16 @@ import unittest
 
 from stockstui.ui.suggesters import TickerSuggester
 
+
 class TestTickerSuggester(unittest.IsolatedAsyncioTestCase):
     """Unit tests for the TickerSuggester."""
 
     def setUp(self):
         """Set up a suggester instance for each test."""
         self.sample_items = [
-            ('AAPL', 'Apple Inc.'),
-            ('GOOGL', 'Alphabet Inc. Class A'),
-            ('TSLA', 'Tesla, Inc.')
+            ("AAPL", "Apple Inc."),
+            ("GOOGL", "Alphabet Inc. Class A"),
+            ("TSLA", "Tesla, Inc."),
         ]
         self.suggester = TickerSuggester(self.sample_items)
 
@@ -31,9 +32,9 @@ class TestTickerSuggester(unittest.IsolatedAsyncioTestCase):
     async def test_empty_input(self):
         suggestion = await self.suggester.get_suggestion("")
         self.assertIsNone(suggestion)
-        
+
     async def test_prefix_has_priority(self):
-        items_with_overlap = [('TES', 'Some Other Company'), ('TSLA', 'Tesla, Inc.')]
+        items_with_overlap = [("TES", "Some Other Company"), ("TSLA", "Tesla, Inc.")]
         suggester_overlap = TickerSuggester(items_with_overlap)
         suggestion = await suggester_overlap.get_suggestion("TES")
         self.assertEqual(suggestion, " - Some Other Company - TES")

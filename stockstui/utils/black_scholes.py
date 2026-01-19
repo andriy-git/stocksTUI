@@ -2,6 +2,7 @@
 Black-Scholes Options Pricing Model Calculator.
 Used to calculate Greeks (Delta, Gamma, Theta, Vega) for options.
 """
+
 import math
 import logging
 
@@ -21,13 +22,7 @@ def _norm_cdf(x):
 
 
 def calculate_greeks(
-    flag: str,
-    S: float,
-    K: float,
-    T: float,
-    r: float,
-    sigma: float,
-    q: float = 0.0
+    flag: str, S: float, K: float, T: float, r: float, sigma: float, q: float = 0.0
 ) -> dict:
     """
     Calculate option Greeks using Black-Scholes model.
@@ -46,10 +41,10 @@ def calculate_greeks(
     """
     try:
         if T <= 0 or sigma <= 0 or S <= 0 or K <= 0:
-            return {'delta': 0.0, 'gamma': 0.0, 'theta': 0.0, 'vega': 0.0, 'rho': 0.0}
+            return {"delta": 0.0, "gamma": 0.0, "theta": 0.0, "vega": 0.0, "rho": 0.0}
 
         sqrt_T = math.sqrt(T)
-        d1 = (math.log(S / K) + (r - q + 0.5 * sigma ** 2) * T) / (sigma * sqrt_T)
+        d1 = (math.log(S / K) + (r - q + 0.5 * sigma**2) * T) / (sigma * sqrt_T)
         d2 = d1 - sigma * sqrt_T
 
         pdf_d1 = _norm_pdf(d1)
@@ -60,40 +55,50 @@ def calculate_greeks(
 
         # Common Greeks
         gamma = (pdf_d1 * math.exp(-q * T)) / (S * sigma * sqrt_T)
-        vega = S * math.exp(-q * T) * pdf_d1 * sqrt_T * 0.01  # Scaled by 0.01 for 1% change in vol
+        vega = (
+            S * math.exp(-q * T) * pdf_d1 * sqrt_T * 0.01
+        )  # Scaled by 0.01 for 1% change in vol
 
-        if flag.lower() == 'c':
+        if flag.lower() == "c":
             # Call Greeks
             delta = math.exp(-q * T) * cdf_d1
-            
+
             theta_part1 = -(S * sigma * math.exp(-q * T) * pdf_d1) / (2 * sqrt_T)
             theta_part2 = -r * K * math.exp(-r * T) * cdf_d2
             theta_part3 = q * S * math.exp(-q * T) * cdf_d1
-            theta = (theta_part1 + theta_part2 + theta_part3) / DAYS_PER_YEAR  # Daily theta
-            
-            rho = K * T * math.exp(-r * T) * cdf_d2 * 0.01  # Scaled by 0.01 for 1% change in rate
+            theta = (
+                theta_part1 + theta_part2 + theta_part3
+            ) / DAYS_PER_YEAR  # Daily theta
 
-        elif flag.lower() == 'p':
+            rho = (
+                K * T * math.exp(-r * T) * cdf_d2 * 0.01
+            )  # Scaled by 0.01 for 1% change in rate
+
+        elif flag.lower() == "p":
             # Put Greeks
             delta = -math.exp(-q * T) * cdf_neg_d1
-            
+
             theta_part1 = -(S * sigma * math.exp(-q * T) * pdf_d1) / (2 * sqrt_T)
             theta_part2 = r * K * math.exp(-r * T) * cdf_neg_d2
             theta_part3 = -q * S * math.exp(-q * T) * cdf_neg_d1
-            theta = (theta_part1 + theta_part2 + theta_part3) / DAYS_PER_YEAR  # Daily theta
-            
-            rho = -K * T * math.exp(-r * T) * cdf_neg_d2 * 0.01  # Scaled by 0.01 for 1% change in rate
+            theta = (
+                theta_part1 + theta_part2 + theta_part3
+            ) / DAYS_PER_YEAR  # Daily theta
+
+            rho = (
+                -K * T * math.exp(-r * T) * cdf_neg_d2 * 0.01
+            )  # Scaled by 0.01 for 1% change in rate
         else:
             return {}
 
         return {
-            'delta': delta,
-            'gamma': gamma,
-            'theta': theta,
-            'vega': vega,
-            'rho': rho
+            "delta": delta,
+            "gamma": gamma,
+            "theta": theta,
+            "vega": vega,
+            "rho": rho,
         }
 
     except Exception as e:
         logging.error(f"Error calculating Greeks: {e}")
-        return {'delta': 0.0, 'gamma': 0.0, 'theta': 0.0, 'vega': 0.0, 'rho': 0.0}
+        return {"delta": 0.0, "gamma": 0.0, "theta": 0.0, "vega": 0.0, "rho": 0.0}

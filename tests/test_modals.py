@@ -2,15 +2,23 @@ import unittest
 
 from textual.app import App
 from stockstui.ui.modals import (
-    ConfirmDeleteModal, AddListModal, EditListModal,
-    AddTickerModal, EditTickerModal, CreatePortfolioModal, EditPortfolioModal
+    ConfirmDeleteModal,
+    AddListModal,
+    EditListModal,
+    AddTickerModal,
+    EditTickerModal,
+    CreatePortfolioModal,
+    EditPortfolioModal,
 )
 from stockstui.ui.position_modal import PositionModal
 from stockstui.ui.quick_edit_ticker_modal import QuickEditTickerModal
 
+
 class ModalsTestApp(App):
     """A minimal app for testing modals."""
+
     pass
+
 
 class TestModals(unittest.IsolatedAsyncioTestCase):
     """
@@ -18,24 +26,30 @@ class TestModals(unittest.IsolatedAsyncioTestCase):
     These tests verify that modals compose correctly and return the expected
     data when their buttons are pressed.
     """
+
     async def test_confirm_delete_modal(self):
         """Test the ConfirmDeleteModal."""
         app = ModalsTestApp()
         async with app.run_test() as pilot:
             result = None
+
             def set_result(r):
                 nonlocal result
                 result = r
 
             # Test confirm
-            await pilot.app.push_screen(ConfirmDeleteModal("item", "Delete?"), set_result)
+            await pilot.app.push_screen(
+                ConfirmDeleteModal("item", "Delete?"), set_result
+            )
             await pilot.pause()
             await pilot.click("#delete")
             await pilot.pause()
             self.assertTrue(result)
 
             # Test cancel
-            await pilot.app.push_screen(ConfirmDeleteModal("item", "Delete?"), set_result)
+            await pilot.app.push_screen(
+                ConfirmDeleteModal("item", "Delete?"), set_result
+            )
             await pilot.pause()
             await pilot.click("#cancel")
             await pilot.pause()
@@ -45,7 +59,8 @@ class TestModals(unittest.IsolatedAsyncioTestCase):
         """Test the AddListModal."""
         app = ModalsTestApp()
         async with app.run_test() as pilot:
-            result = "" # Use a non-None default
+            result = ""  # Use a non-None default
+
             def set_result(r):
                 nonlocal result
                 result = r
@@ -57,7 +72,7 @@ class TestModals(unittest.IsolatedAsyncioTestCase):
             await pilot.click("#add")
             await pilot.pause()
             self.assertEqual(result, "test_list")
-            
+
             # Test cancel
             await pilot.app.push_screen(AddListModal(), set_result)
             await pilot.pause()
@@ -70,19 +85,20 @@ class TestModals(unittest.IsolatedAsyncioTestCase):
         app = ModalsTestApp()
         async with app.run_test() as pilot:
             result = ""
+
             def set_result(r):
                 nonlocal result
                 result = r
-            
+
             current_value = "old_name"
             await pilot.app.push_screen(EditListModal(current_value), set_result)
             await pilot.pause()
-            
+
             # FIX: Clear the input before typing to prevent overwriting selected text.
             for _ in current_value:
                 await pilot.press("backspace")
             await pilot.press("n", "e", "w", "_", "n", "a", "m", "e")
-            
+
             await pilot.click("#save")
             await pilot.pause()
             self.assertEqual(result, "new_name")
@@ -92,13 +108,34 @@ class TestModals(unittest.IsolatedAsyncioTestCase):
         app = ModalsTestApp()
         async with app.run_test() as pilot:
             result = None
+
             def set_result(r):
                 nonlocal result
                 result = r
 
             await pilot.app.push_screen(AddTickerModal(), set_result)
             await pilot.pause()
-            await pilot.press("a", "a", "p", "l", "tab", "a", "p", "p", "l", "e", "tab", "n", "o", "t", "e", "tab", "t", "a", "g")
+            await pilot.press(
+                "a",
+                "a",
+                "p",
+                "l",
+                "tab",
+                "a",
+                "p",
+                "p",
+                "l",
+                "e",
+                "tab",
+                "n",
+                "o",
+                "t",
+                "e",
+                "tab",
+                "t",
+                "a",
+                "g",
+            )
             await pilot.click("#add")
             await pilot.pause()
             self.assertEqual(result, ("AAPL", "apple", "note", "tag"))
@@ -108,15 +145,18 @@ class TestModals(unittest.IsolatedAsyncioTestCase):
         app = ModalsTestApp()
         async with app.run_test() as pilot:
             result = None
+
             def set_result(r):
                 nonlocal result
                 result = r
 
             current_alias = "alias"
-            await pilot.app.push_screen(EditTickerModal("TICK", current_alias, "note", "tags"), set_result)
+            await pilot.app.push_screen(
+                EditTickerModal("TICK", current_alias, "note", "tags"), set_result
+            )
             await pilot.pause()
-            await pilot.press("tab") # Focus the alias input
-            
+            await pilot.press("tab")  # Focus the alias input
+
             # FIX: Clear and re-type to avoid selection issues.
             for _ in current_alias:
                 await pilot.press("backspace")
@@ -125,12 +165,13 @@ class TestModals(unittest.IsolatedAsyncioTestCase):
             await pilot.click("#save")
             await pilot.pause()
             self.assertEqual(result, ("TICK", "new_alias", "note", "tags"))
-            
+
     async def test_create_portfolio_modal(self):
         """Test the CreatePortfolioModal."""
         app = ModalsTestApp()
         async with app.run_test() as pilot:
             result = None
+
             def set_result(r):
                 nonlocal result
                 result = r
@@ -147,12 +188,15 @@ class TestModals(unittest.IsolatedAsyncioTestCase):
         app = ModalsTestApp()
         async with app.run_test() as pilot:
             result = None
+
             def set_result(r):
                 nonlocal result
                 result = r
-            
+
             current_name = "old"
-            await pilot.app.push_screen(EditPortfolioModal(current_name, "old_desc"), set_result)
+            await pilot.app.push_screen(
+                EditPortfolioModal(current_name, "old_desc"), set_result
+            )
             await pilot.pause()
 
             # FIX: Clear and re-type to avoid selection issues.
@@ -169,34 +213,41 @@ class TestModals(unittest.IsolatedAsyncioTestCase):
         app = ModalsTestApp()
         async with app.run_test() as pilot:
             result = None
+
             def set_result(r):
                 nonlocal result
                 result = r
-            
+
             # Test Save
-            await pilot.app.push_screen(PositionModal("AAPL", {'quantity': 10, 'avg_cost': 150.0}), set_result)
+            await pilot.app.push_screen(
+                PositionModal("AAPL", {"quantity": 10, "avg_cost": 150.0}), set_result
+            )
             await pilot.pause()
-            
+
             # Clear inputs
             await pilot.click("#quantity-input")
             # Clear existing value (check modal init for value)
             # Init with quantity 10 -> "10" (length 2)
-            for _ in range(5): await pilot.press("backspace", "delete") 
+            for _ in range(5):
+                await pilot.press("backspace", "delete")
             await pilot.press("2", "0")
-            
+
             await pilot.click("#cost-input")
             # Init with avg_cost 150.0 -> "150.0" (length 5)
-            for _ in range(10): await pilot.press("backspace", "delete")
+            for _ in range(10):
+                await pilot.press("backspace", "delete")
             await pilot.press("1", "5", "5")
 
             await pilot.click("#save")
             await pilot.pause()
-            
+
             self.assertEqual(result, (20.0, 155.0))
 
             # Test Delete
             result = None
-            await pilot.app.push_screen(PositionModal("AAPL", {'quantity': 10}), set_result)
+            await pilot.app.push_screen(
+                PositionModal("AAPL", {"quantity": 10}), set_result
+            )
             await pilot.pause()
             await pilot.click("#delete")
             await pilot.pause()
@@ -207,23 +258,27 @@ class TestModals(unittest.IsolatedAsyncioTestCase):
         app = ModalsTestApp()
         async with app.run_test() as pilot:
             result = None
+
             def set_result(r):
                 nonlocal result
                 result = r
-            
+
             # Test Edit Alias (Default)
-            ticker_data = {'alias': 'OldAlias', 'note': 'Note', 'tags': 'tag1'}
-            await pilot.app.push_screen(QuickEditTickerModal("AAPL", "stocks", ticker_data), set_result)
+            ticker_data = {"alias": "OldAlias", "note": "Note", "tags": "tag1"}
+            await pilot.app.push_screen(
+                QuickEditTickerModal("AAPL", "stocks", ticker_data), set_result
+            )
             await pilot.pause()
-            
+
             # Should be focused on value input of alias
             # Clear and type new alias
             await pilot.click("#value-input")
             # 'OldAlias' length is 8
-            for _ in range(15): await pilot.press("backspace", "delete")
+            for _ in range(15):
+                await pilot.press("backspace", "delete")
             await pilot.press("N", "e", "w", "A", "l", "i", "a", "s")
-            
+
             await pilot.click("#save")
             await pilot.pause()
-            
+
             self.assertEqual(result, ("alias", "NewAlias"))

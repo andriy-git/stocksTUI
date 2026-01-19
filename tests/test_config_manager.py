@@ -8,6 +8,7 @@ import stockstui.config_manager
 from platformdirs import PlatformDirs
 from stockstui.config_manager import ConfigManager
 
+
 class TestConfigManager(unittest.TestCase):
     """
     Unit tests for ConfigManager. All original tests are preserved,
@@ -35,10 +36,12 @@ class TestConfigManager(unittest.TestCase):
             "refresh_interval": 30.0,
             "default_tab_category": "stocks",
             "market_calendar": "NYSE",
-            "hidden_tabs": []
+            "hidden_tabs": [],
         }
         self.default_lists = {"stocks": [{"ticker": "DEFAULT"}]}
-        self.default_themes = {"gruvbox_soft_dark": {"dark": True, "palette": {"blue": "#0000ff"}}}
+        self.default_themes = {
+            "gruvbox_soft_dark": {"dark": True, "palette": {"blue": "#0000ff"}}
+        }
         self.default_portfolios = {"portfolios": {"default": {"tickers": []}}}
 
         for fname, data in [
@@ -54,7 +57,7 @@ class TestConfigManager(unittest.TestCase):
         self.mock_dirs.user_cache_dir = str(self.user_cache_dir)
         self.patcher = patch("platformdirs.PlatformDirs", return_value=self.mock_dirs)
         self.patcher.start()
-        
+
         # Reload the module to use the mocked PlatformDirs
         importlib.reload(stockstui.config_manager)
 
@@ -75,8 +78,11 @@ class TestConfigManager(unittest.TestCase):
 
         cm = ConfigManager(app_root=self.app_root)
         # ConfigManager should prioritize user files over defaults
-        self.assertEqual(cm.settings.get("theme"), user_settings["theme"],
-                         "User theme wasn't loaded correctly")
+        self.assertEqual(
+            cm.settings.get("theme"),
+            user_settings["theme"],
+            "User theme wasn't loaded correctly",
+        )
 
     def test_handles_corrupted_json_file(self):
         settings_path = self.user_config_dir / "settings.json"
@@ -92,26 +98,32 @@ class TestConfigManager(unittest.TestCase):
         cm.save_settings()
 
         settings_path = self.user_config_dir / "settings.json"
-        self.assertTrue(settings_path.exists(), "settings.json must exist after save_settings()")
-        
+        self.assertTrue(
+            settings_path.exists(), "settings.json must exist after save_settings()"
+        )
+
         with open(settings_path, "r") as f:
             saved = json.load(f)
-        self.assertEqual(saved.get("theme"), "new_theme", "settings.json didn't include updated theme")
+        self.assertEqual(
+            saved.get("theme"),
+            "new_theme",
+            "settings.json didn't include updated theme",
+        )
 
     def test_portfolio_migration_logic(self):
         """Test the portfolio migration logic specifically"""
         # Create test lists that should be migrated
         test_lists = {
             "stocks": [{"ticker": "AAPL"}, {"ticker": "MSFT"}],
-            "crypto": [{"ticker": "BTC-USD"}]
+            "crypto": [{"ticker": "BTC-USD"}],
         }
-        
+
         # Write test lists to default config
         lists_path = self.default_dir / "lists.json"
         lists_path.write_text(json.dumps(test_lists))
-        
+
         cm = ConfigManager(app_root=self.app_root)
-        
+
         # Check if migration occurred by looking for the expected behavior
         # This might vary based on actual implementation
         if "portfolios" in cm.portfolios and "default" in cm.portfolios["portfolios"]:
@@ -119,5 +131,9 @@ class TestConfigManager(unittest.TestCase):
             # Check if any of our test tickers are in the default portfolio
             test_tickers = ["AAPL", "MSFT", "BTC-USD"]
             found_any = any(ticker in default_tickers for ticker in test_tickers)
-            self.assertTrue(found_any, "At least one test ticker should be in default portfolio")
-            self.assertTrue(cm.portfolios.get('settings', {}).get('migration_completed', False))
+            self.assertTrue(
+                found_any, "At least one test ticker should be in default portfolio"
+            )
+            self.assertTrue(
+                cm.portfolios.get("settings", {}).get("migration_completed", False)
+            )

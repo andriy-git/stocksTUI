@@ -5,6 +5,7 @@ from textual.containers import VerticalScroll
 
 from stockstui.ui.widgets.tag_filter import TagFilterWidget, TagFilterChanged
 
+
 class WidgetsTestApp(App):
     """A minimal app for testing widgets."""
 
@@ -34,7 +35,7 @@ class TestTagFilterWidget(unittest.IsolatedAsyncioTestCase):
         async with app.run_test(size=(120, 40)) as pilot:
             # FIX: Instead of clicking, which is coordinate-based and can be flaky,
             # query for the button and call its press() method directly. This is more robust.
-            
+
             # Toggle the widget's display to make its children queryable
             widget.display = True
             await pilot.pause()

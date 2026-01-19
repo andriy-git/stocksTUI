@@ -53,7 +53,7 @@ class ConfigContainer(Vertical):
             # Only add to history if it's a new view, not a repeat of the last one.
             if not self._history or self._history[-1] != view_id:
                 self._history.append(view_id)
-        
+
         try:
             self.query(f"#{view_id}").first().focus()
         except NoMatches:
@@ -74,7 +74,7 @@ class ConfigContainer(Vertical):
                 pass
             return True
         return False
-        
+
     # --- Public API for View Switching ---
 
     def show_main(self):

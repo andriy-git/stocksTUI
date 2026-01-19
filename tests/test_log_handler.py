@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 
 from stockstui.log_handler import TextualHandler
 
+
 class TestLogHandler(unittest.TestCase):
     """Unit tests for the Textual log handler."""
 
@@ -13,10 +14,10 @@ class TestLogHandler(unittest.TestCase):
         mock_app.notify = MagicMock()
 
         handler = TextualHandler(app=mock_app)
-        handler.setFormatter(logging.Formatter('%(message)s'))
+        handler.setFormatter(logging.Formatter("%(message)s"))
 
         # Create a logger and add our handler
-        logger = logging.getLogger('test_logger')
+        logger = logging.getLogger("test_logger")
         logger.setLevel(logging.INFO)
         logger.addHandler(handler)
 
@@ -27,7 +28,7 @@ class TestLogHandler(unittest.TestCase):
             "Informational message.",
             title="Info",
             severity="information",
-            timeout=8
+            timeout=8,
         )
 
         logger.warning("A warning message.")
@@ -36,7 +37,7 @@ class TestLogHandler(unittest.TestCase):
             "A warning message.",
             title="Warning",
             severity="warning",
-            timeout=8
+            timeout=8,
         )
 
         logger.error("An error message.")
@@ -45,7 +46,7 @@ class TestLogHandler(unittest.TestCase):
             "An error message.",
             title="Error",
             severity="error",
-            timeout=8
+            timeout=8,
         )
 
         # Prevent logs from propagating to the root logger in the test runner

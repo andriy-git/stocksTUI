@@ -2,10 +2,13 @@ import unittest
 from textual.app import App, ComposeResult
 from stockstui.ui.widgets.navigable_data_table import NavigableDataTable
 
+
 class NavigableDataTableApp(App):
     """A minimal app for testing the NavigableDataTable."""
+
     def compose(self) -> ComposeResult:
         yield NavigableDataTable(id="test-table")
+
 
 class TestNavigableDataTable(unittest.IsolatedAsyncioTestCase):
     """Tests for the NavigableDataTable widget within a running app."""
@@ -28,7 +31,7 @@ class TestNavigableDataTable(unittest.IsolatedAsyncioTestCase):
             table.add_column("Data")
             for i in range(5):
                 table.add_row(f"Row {i}")
-            
+
             self.assertEqual(table.cursor_row, 0)
             table.action_cursor_down()
             await pilot.pause()
@@ -48,14 +51,14 @@ class TestNavigableDataTable(unittest.IsolatedAsyncioTestCase):
             # Test at top
             table.move_cursor(row=0)
             await pilot.pause()
-            table.action_cursor_up() # Should not move
+            table.action_cursor_up()  # Should not move
             await pilot.pause()
             self.assertEqual(table.cursor_row, 0)
 
             # Test at bottom
             table.move_cursor(row=1)
             await pilot.pause()
-            table.action_cursor_down() # Should not move
+            table.action_cursor_down()  # Should not move
             await pilot.pause()
             self.assertEqual(table.cursor_row, 1)
 
@@ -69,10 +72,10 @@ class TestNavigableDataTable(unittest.IsolatedAsyncioTestCase):
 
             table.move_cursor(row=5)
             await pilot.pause()
-            table.move_cursor(row=table.row_count - 1) # Use move_cursor
+            table.move_cursor(row=table.row_count - 1)  # Use move_cursor
             await pilot.pause()
             self.assertEqual(table.cursor_row, 9)
-            table.move_cursor(row=0) # Use move_cursor
+            table.move_cursor(row=0)  # Use move_cursor
             await pilot.pause()
             self.assertEqual(table.cursor_row, 0)
 
@@ -87,14 +90,18 @@ class TestNavigableDataTable(unittest.IsolatedAsyncioTestCase):
             table.move_cursor(row=1)
             await pilot.pause()
             print(f"Row object: {table.get_row_at(table.cursor_row)}")
-            row_data = table.get_row_at(table.cursor_row) # get_row_at returns a list directly
+            row_data = table.get_row_at(
+                table.cursor_row
+            )  # get_row_at returns a list directly
             self.assertEqual(row_data, ["GOOG", "2800.00"])
 
     async def test_get_current_row_data_empty_table(self):
         """Test getting row data from an empty table."""
         async with self.app.run_test() as pilot:
             table = pilot.app.query_one(NavigableDataTable)
-            row_data = table.get_row_at(table.cursor_row) if table.row_count > 0 else None # get_row_at returns a list directly
+            row_data = (
+                table.get_row_at(table.cursor_row) if table.row_count > 0 else None
+            )  # get_row_at returns a list directly
             self.assertIsNone(row_data)
 
     async def test_get_current_row_key(self):

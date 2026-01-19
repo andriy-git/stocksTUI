@@ -5,8 +5,10 @@ from textual.widgets import Select, ContentSwitcher, Input, DataTable
 
 from stockstui.ui.views.options_view import OptionsView
 
+
 class OptionsViewTestApp(App):
     """App wrapper for testing OptionsView."""
+
     def __init__(self):
         super().__init__()
         self.config = MagicMock()
@@ -22,7 +24,7 @@ class OptionsViewTestApp(App):
             "text-muted": "dim",
             "accent": "blue",
             "primary": "blue",
-            "foreground": "white"
+            "foreground": "white",
         }
         self._last_options_data = None
         self.option_positions = {}
@@ -37,8 +39,8 @@ class OptionsViewTestApp(App):
     def compose(self):
         yield OptionsView()
 
+
 class TestOptionsView(unittest.IsolatedAsyncioTestCase):
-    
     def test_parse_ticker_logic(self):
         """Test the helper method _parse_ticker_from_input directly."""
         # This method is pure logic, doesn't need a running app
@@ -50,13 +52,13 @@ class TestOptionsView(unittest.IsolatedAsyncioTestCase):
     async def test_initial_state(self):
         """Test initial UI state on mount."""
         app = OptionsViewTestApp()
-        async with app.run_test() as pilot:
-            view = app.query_one(OptionsView)
+        async with app.run_test():
+            app.query_one(OptionsView)
             select = app.query_one("#options-expiration-select", Select)
-            
+
             # Should be disabled initially
             self.assertTrue(select.disabled)
-            
+
             # Ticker input should exist
             inp = app.query_one("#options-ticker-input", Input)
             self.assertIsNotNone(inp)
@@ -66,43 +68,43 @@ class TestOptionsView(unittest.IsolatedAsyncioTestCase):
         app = OptionsViewTestApp()
         async with app.run_test() as pilot:
             view = app.query_one(OptionsView)
-            
+
             dates = ["2023-01-01", "2023-02-01"]
             view.update_expirations(dates)
             await pilot.pause()
-            
+
             select = app.query_one("#options-expiration-select", Select)
             self.assertFalse(select.disabled)
-            self.assertEqual(select.value, "2023-01-01") # Defaults to first
+            self.assertEqual(select.value, "2023-01-01")  # Defaults to first
 
     async def test_expiration_navigation_actions(self):
         """Test next/prev expiration actions."""
         app = OptionsViewTestApp()
         async with app.run_test() as pilot:
             view = app.query_one(OptionsView)
-            
+
             # Setup
             dates = ["D1", "D2", "D3"]
             view.update_expirations(dates)
             await pilot.pause()
-            
+
             select = app.query_one("#options-expiration-select", Select)
             self.assertEqual(select.value, "D1")
-            
+
             # Test Next
             view.action_next_expiration()
             await pilot.pause()
             self.assertEqual(select.value, "D2")
-            
+
             view.action_next_expiration()
             await pilot.pause()
             self.assertEqual(select.value, "D3")
-            
+
             # Cap at end
             view.action_next_expiration()
             await pilot.pause()
             self.assertEqual(select.value, "D3")
-            
+
             # Test Prev
             view.action_prev_expiration()
             await pilot.pause()
@@ -124,15 +126,34 @@ class TestOptionsView(unittest.IsolatedAsyncioTestCase):
         async with app.run_test() as pilot:
             view = app.query_one(OptionsView)
             app._last_options_data = {
-                "calls": MagicMock(empty=False), # Mock dataframe
+                "calls": MagicMock(empty=False),  # Mock dataframe
                 "puts": MagicMock(empty=False),
-                "underlying": {"regularMarketPrice": 100}
+                "underlying": {"regularMarketPrice": 100},
             }
             # We need real DataFrames for render logic iterates rows...
             # Creating dummy DF
             import pandas as pd
-            app._last_options_data["calls"] = pd.DataFrame([{"strike": 100, "contractSymbol": "C1", "openInterest": 10, "volume": 5}])
-            app._last_options_data["puts"] = pd.DataFrame([{"strike": 100, "contractSymbol": "P1", "openInterest": 10, "volume": 5}])
+
+            app._last_options_data["calls"] = pd.DataFrame(
+                [
+                    {
+                        "strike": 100,
+                        "contractSymbol": "C1",
+                        "openInterest": 10,
+                        "volume": 5,
+                    }
+                ]
+            )
+            app._last_options_data["puts"] = pd.DataFrame(
+                [
+                    {
+                        "strike": 100,
+                        "contractSymbol": "P1",
+                        "openInterest": 10,
+                        "volume": 5,
+                    }
+                ]
+            )
 
             # Manually trigger render
             await view._render_options_data()
@@ -175,11 +196,12 @@ class TestOptionsView(unittest.IsolatedAsyncioTestCase):
 
             # Simulate empty data condition
             import pandas as pd
+
             empty_df = pd.DataFrame()
             app._last_options_data = {
                 "calls": empty_df,
                 "puts": empty_df,
-                "underlying": {}
+                "underlying": {},
             }
             app.options_ticker = "AAPL"
 
@@ -191,7 +213,7 @@ class TestOptionsView(unittest.IsolatedAsyncioTestCase):
     async def test_manage_position_action_without_focus(self):
         """Test action_manage_position when no table is focused."""
         app = OptionsViewTestApp()
-        async with app.run_test() as pilot:
+        async with app.run_test():
             view = app.query_one(OptionsView)
 
             # Temporarily override the focused property to return None
@@ -207,8 +229,9 @@ class TestOptionsView(unittest.IsolatedAsyncioTestCase):
     async def test_manage_position_action_with_wrong_focus(self):
         """Test action_manage_position when focused element is not an options table."""
         from textual.widgets import Label
+
         app = OptionsViewTestApp()
-        async with app.run_test() as pilot:
+        async with app.run_test():
             view = app.query_one(OptionsView)
 
             # Create a mock widget that's not an options table
@@ -229,7 +252,7 @@ class TestOptionsView(unittest.IsolatedAsyncioTestCase):
         from textual.widgets import DataTable
 
         app = OptionsViewTestApp()
-        async with app.run_test() as pilot:
+        async with app.run_test():
             view = app.query_one(OptionsView)
 
             # Create a mock DataTable that simulates no row selection
@@ -268,16 +291,35 @@ class TestOptionsView(unittest.IsolatedAsyncioTestCase):
 
             # Set up data for rendering first - but avoid creating the chart by using minimal data
             app._last_options_data = {
-                "calls": pd.DataFrame([{"strike": 100, "contractSymbol": "AAPL230101C00100000", "openInterest": 10, "volume": 5}]),
-                "puts": pd.DataFrame([{"strike": 100, "contractSymbol": "AAPL230101P00100000", "openInterest": 10, "volume": 5}]),
-                "underlying": {"regularMarketPrice": 100}
+                "calls": pd.DataFrame(
+                    [
+                        {
+                            "strike": 100,
+                            "contractSymbol": "AAPL230101C00100000",
+                            "openInterest": 10,
+                            "volume": 5,
+                        }
+                    ]
+                ),
+                "puts": pd.DataFrame(
+                    [
+                        {
+                            "strike": 100,
+                            "contractSymbol": "AAPL230101P00100000",
+                            "openInterest": 10,
+                            "volume": 5,
+                        }
+                    ]
+                ),
+                "underlying": {"regularMarketPrice": 100},
             }
             app.options_ticker = "AAPL"
 
             # Temporarily disable the chart creation by mocking the OIChart constructor
             from unittest.mock import patch
             from stockstui.ui.widgets.oi_chart import OIChart
-            with patch.object(OIChart, 'replot', return_value=None):
+
+            with patch.object(OIChart, "replot", return_value=None):
                 # Render the data to create the tables
                 await view._render_options_data()
                 await pilot.pause()
@@ -294,7 +336,9 @@ class TestOptionsView(unittest.IsolatedAsyncioTestCase):
                 # Mock coordinate_to_cell_key to return a valid contract symbol
                 mock_coord_result = Mock()
                 mock_coord_result.row_key = Mock()
-                mock_coord_result.row_key.value = "AAPL230101C00100000"  # Valid contract symbol
+                mock_coord_result.row_key.value = (
+                    "AAPL230101C00100000"  # Valid contract symbol
+                )
                 mock_table.coordinate_to_cell_key.return_value = mock_coord_result
 
                 # This should attempt to open the PositionModal
@@ -306,7 +350,7 @@ class TestOptionsView(unittest.IsolatedAsyncioTestCase):
     async def test_request_expirations_when_no_ticker(self):
         """Test _request_expirations when no ticker is set."""
         app = OptionsViewTestApp()
-        async with app.run_test() as pilot:
+        async with app.run_test():
             view = app.query_one(OptionsView)
 
             # Ensure no ticker is set
@@ -318,7 +362,7 @@ class TestOptionsView(unittest.IsolatedAsyncioTestCase):
     async def test_request_options_chain_when_no_ticker(self):
         """Test _request_options_chain when no ticker is set."""
         app = OptionsViewTestApp()
-        async with app.run_test() as pilot:
+        async with app.run_test():
             view = app.query_one(OptionsView)
 
             # Ensure no ticker is set
@@ -354,7 +398,7 @@ class TestOptionsView(unittest.IsolatedAsyncioTestCase):
         """Test handling ticker submission."""
         app = OptionsViewTestApp()
 
-        async with app.run_test() as pilot:
+        async with app.run_test():
             view = app.query_one(OptionsView)
 
             # Mock the fetch_options_expirations method on the app
@@ -362,6 +406,7 @@ class TestOptionsView(unittest.IsolatedAsyncioTestCase):
 
             # Create a mock input submission event
             from textual.widgets import Input
+
             input_widget = app.query_one("#options-ticker-input", Input)
 
             # Test with a valid value
@@ -376,7 +421,7 @@ class TestOptionsView(unittest.IsolatedAsyncioTestCase):
         """Test handling ticker submission with suggestion format (TICKER - Description)."""
         app = OptionsViewTestApp()
 
-        async with app.run_test() as pilot:
+        async with app.run_test():
             view = app.query_one(OptionsView)
 
             # Mock the fetch_options_expirations method on the app
@@ -384,6 +429,7 @@ class TestOptionsView(unittest.IsolatedAsyncioTestCase):
 
             # Create a mock input submission event
             from textual.widgets import Input
+
             input_widget = app.query_one("#options-ticker-input", Input)
 
             # Test with suggestion format
@@ -411,6 +457,7 @@ class TestOptionsView(unittest.IsolatedAsyncioTestCase):
 
             # Create a mock select change event - fix the constructor
             from textual.widgets import Select
+
             select_widget = app.query_one("#options-expiration-select", Select)
             event = Select.Changed(select_widget, "2023-01-01")
             view.on_expiration_changed(event)
@@ -424,12 +471,31 @@ class TestOptionsView(unittest.IsolatedAsyncioTestCase):
 
         # Set up data for rendering first
         import pandas as pd
+
         async with app.run_test() as pilot:
             view = app.query_one(OptionsView)
             app._last_options_data = {
-                "calls": pd.DataFrame([{"strike": 100, "contractSymbol": "C1", "openInterest": 10, "volume": 5}]),
-                "puts": pd.DataFrame([{"strike": 100, "contractSymbol": "P1", "openInterest": 10, "volume": 5}]),
-                "underlying": {"regularMarketPrice": 100}
+                "calls": pd.DataFrame(
+                    [
+                        {
+                            "strike": 100,
+                            "contractSymbol": "C1",
+                            "openInterest": 10,
+                            "volume": 5,
+                        }
+                    ]
+                ),
+                "puts": pd.DataFrame(
+                    [
+                        {
+                            "strike": 100,
+                            "contractSymbol": "P1",
+                            "openInterest": 10,
+                            "volume": 5,
+                        }
+                    ]
+                ),
+                "underlying": {"regularMarketPrice": 100},
             }
 
             # Render the data to create the UI elements
@@ -438,7 +504,8 @@ class TestOptionsView(unittest.IsolatedAsyncioTestCase):
 
             # Trigger the button press event - fix the method signature (takes only self)
             from textual.widgets import Button
+
             button = app.query_one("#options-view-toggle", Button)
-            event = Button.Pressed(button)
+            Button.Pressed(button)
             # Call the method without the event parameter since it only takes 'self'
             view.on_toggle_chart_pressed()

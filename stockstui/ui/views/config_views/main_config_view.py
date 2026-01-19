@@ -9,7 +9,6 @@ if TYPE_CHECKING:
     from stockstui.ui.views.config_view import ConfigContainer
 
 
-
 class MainConfigView(Static):
     """The main hub screen for the configuration tab."""
 
@@ -18,7 +17,7 @@ class MainConfigView(Static):
         if event.key in ("j", "down", "k", "up"):
             focused = self.app.focused
             if isinstance(focused, Button):
-                 # Find all buttons in order
+                # Find all buttons in order
                 buttons = list(self.query("Button"))
                 if focused in buttons:
                     idx = buttons.index(focused)
@@ -31,13 +30,28 @@ class MainConfigView(Static):
     def compose(self) -> ComposeResult:
         """Creates the layout for the main config view."""
         with Vertical(classes="vertical-center"):
-            yield Button("General Settings", id="goto-general", variant="primary", classes="config-hub-button")
+            yield Button(
+                "General Settings",
+                id="goto-general",
+                variant="primary",
+                classes="config-hub-button",
+            )
             yield Static(classes="spacer")
-            yield Button("Watchlists", id="goto-lists", variant="primary", classes="config-hub-button")
+            yield Button(
+                "Watchlists",
+                id="goto-lists",
+                variant="primary",
+                classes="config-hub-button",
+            )
             yield Static(classes="spacer")
             # yield Button("Portfolios", id="goto-portfolios", variant="primary", classes="config-hub-button")
             # yield Static(classes="spacer")
-            yield Button("FRED Settings", id="goto-fred", variant="primary", classes="config-hub-button")
+            yield Button(
+                "FRED Settings",
+                id="goto-fred",
+                variant="primary",
+                classes="config-hub-button",
+            )
 
     @on(Button.Pressed)
     def on_button_pressed(self, event: Button.Pressed) -> None:

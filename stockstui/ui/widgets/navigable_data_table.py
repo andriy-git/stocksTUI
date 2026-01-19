@@ -1,6 +1,7 @@
 from textual.binding import Binding
 from textual.widgets import DataTable
 
+
 class NavigableDataTable(DataTable):
     """A DataTable with an added binding for 'backspace' to go back."""
 

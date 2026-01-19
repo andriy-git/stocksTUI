@@ -6,6 +6,7 @@ from textual.widgets import Label, Static
 
 from textual.binding import Binding
 
+
 class PortfolioConfigView(Static):
     """A view for managing portfolios."""
 
@@ -17,4 +18,3 @@ class PortfolioConfigView(Static):
     def compose(self) -> ComposeResult:
         """Creates the layout for the portfolio config view."""
         yield Label("Portfolio Management (Coming Soon!)")
-

@@ -3,6 +3,7 @@ from textual.widgets import Button, Input, Label
 from textual.containers import Vertical, Horizontal
 from textual.app import ComposeResult, on
 
+
 class EditFredSeriesModal(ModalScreen[str | None]):
     """A modal dialog for setting an alias for a FRED series."""
 
@@ -18,12 +19,12 @@ class EditFredSeriesModal(ModalScreen[str | None]):
             yield Input(
                 value=self.current_alias,
                 id="alias-input",
-                placeholder="Enter alias (leave empty to reset)"
+                placeholder="Enter alias (leave empty to reset)",
             )
             with Horizontal(id="dialog-buttons"):
                 yield Button("Save", variant="primary", id="save")
                 yield Button("Cancel", id="cancel")
-    
+
     def on_mount(self) -> None:
         self.query_one("#alias-input").focus()
 

@@ -1,8 +1,8 @@
 import requests
 import logging
 import numpy as np
-from datetime import datetime, timezone, timedelta
-from typing import Optional, Dict, List, Any, Tuple
+from datetime import datetime, timezone
+from typing import Optional, Dict, List, Any
 
 BASE_URL = "https://api.stlouisfed.org/fred"
 _series_cache: Dict[str, Any] = {}
@@ -13,7 +13,10 @@ CACHE_DURATION_SECONDS = 300  # 5 minutes
 # and plenty for weekly (520), monthly (120), or quarterly (40).
 OBSERVATION_LIMIT = 3000
 
-def get_series_observations(series_id: str, api_key: str, limit: int = OBSERVATION_LIMIT) -> Optional[List[Dict[str, Any]]]:
+
+def get_series_observations(
+    series_id: str, api_key: str, limit: int = OBSERVATION_LIMIT
+) -> Optional[List[Dict[str, Any]]]:
     """
     Fetches observations for a specific FRED series.
     Returns observations in descending order (newest first).
@@ -25,7 +28,7 @@ def get_series_observations(series_id: str, api_key: str, limit: int = OBSERVATI
     series_id = series_id.upper()
     now = datetime.now(timezone.utc)
 
-    # Note: We omit limit from cache key for simplicity under the assumption 
+    # Note: We omit limit from cache key for simplicity under the assumption
     # that we always request the same "10-year" optimized amount for a given series.
     if series_id in _series_cache:
         timestamp, data = _series_cache[series_id]
@@ -41,7 +44,7 @@ def get_series_observations(series_id: str, api_key: str, limit: int = OBSERVATI
             "api_key": api_key,
             "file_type": "json",
             "sort_order": "desc",  # Get latest data first
-            "limit": limit
+            "limit": limit,
         }
         response = requests.get(url, params=params, timeout=10)
         response.raise_for_status()
@@ -78,7 +81,7 @@ def detect_frequency(observations: List[Dict[str, Any]]) -> str:
         # Calculate differences between consecutive dates
         diffs = []
         for i in range(1, len(dates)):
-            diff = abs((dates[i] - dates[i-1]).days)
+            diff = abs((dates[i] - dates[i - 1]).days)
             diffs.append(diff)
 
         # Calculate average difference
@@ -98,6 +101,7 @@ def detect_frequency(observations: List[Dict[str, Any]]) -> str:
     except Exception:
         # Default to monthly for ambiguous cases
         return "M"
+
 
 def compute_enhanced_metrics(
     observations: List[Dict[str, Any]],
@@ -154,21 +158,21 @@ def compute_enhanced_metrics(
     # Determine period counts based on frequency
     if frequency == "Q":
         short_periods = max(1, short_months // 3)  # 4 quarters for 12 months
-        long_periods = max(2, long_months // 3)    # 8 quarters for 24 months
-        z_periods = z_lookback_years * 4            # Quarters in lookback
+        long_periods = max(2, long_months // 3)  # 8 quarters for 24 months
+        z_periods = z_lookback_years * 4  # Quarters in lookback
     elif frequency == "A":
         short_periods = 1
         long_periods = 2
         z_periods = z_lookback_years
     elif frequency == "W":
         # Weekly data
-        short_periods = 52 # 1 year
-        long_periods = 104 # 2 years
+        short_periods = 52  # 1 year
+        long_periods = 104  # 2 years
         z_periods = z_lookback_years * 52
     elif frequency == "D":
         # Daily data (approx 260 trading days)
-        short_periods = 260 # 1 year
-        long_periods = 520 # 2 years
+        short_periods = 260  # 1 year
+        long_periods = 520  # 2 years
         z_periods = z_lookback_years * 260
     else:  # Monthly or default
         short_periods = short_months
@@ -214,7 +218,9 @@ def compute_enhanced_metrics(
             # Calculate % of range: (current - min) / (max - min) * 100
             hist_range = metrics["hist_max_10y"] - metrics["hist_min_10y"]
             if hist_range != 0:
-                metrics["pct_of_range"] = ((current - metrics["hist_min_10y"]) / hist_range) * 100
+                metrics["pct_of_range"] = (
+                    (current - metrics["hist_min_10y"]) / hist_range
+                ) * 100
 
     return metrics
 
@@ -226,21 +232,17 @@ def get_series_info(series_id: str, api_key: str) -> Optional[Dict[str, Any]]:
     """
     if not api_key:
         return None
-        
+
     if series_id in _info_cache:
         return _info_cache[series_id]
 
     try:
         url = f"{BASE_URL}/series"
-        params = {
-            "series_id": series_id,
-            "api_key": api_key,
-            "file_type": "json"
-        }
+        params = {"series_id": series_id, "api_key": api_key, "file_type": "json"}
         response = requests.get(url, params=params, timeout=10)
         response.raise_for_status()
         data = response.json()
-        
+
         series_list = data.get("seriess", [])
         if series_list:
             _info_cache[series_id] = series_list[0]
@@ -249,6 +251,7 @@ def get_series_info(series_id: str, api_key: str) -> Optional[Dict[str, Any]]:
     except requests.exceptions.RequestException as e:
         logging.error(f"Error fetching FRED series info {series_id}: {e}")
         return None
+
 
 def search_series(search_text: str, api_key: str) -> List[Dict[str, Any]]:
     """
@@ -264,7 +267,7 @@ def search_series(search_text: str, api_key: str) -> List[Dict[str, Any]]:
             "search_text": search_text,
             "api_key": api_key,
             "file_type": "json",
-            "limit": 20
+            "limit": 20,
         }
         response = requests.get(url, params=params, timeout=10)
         response.raise_for_status()
@@ -273,6 +276,7 @@ def search_series(search_text: str, api_key: str) -> List[Dict[str, Any]]:
     except requests.exceptions.RequestException as e:
         logging.error(f"Error searching FRED series '{search_text}': {e}")
         return []
+
 
 def get_series_summary(series_id: str, api_key: str) -> Dict[str, Any]:
     """
@@ -302,17 +306,17 @@ def get_series_summary(series_id: str, api_key: str) -> Dict[str, Any]:
         "hist_max_10y": None,
         "pct_of_range": None,
         # Legacy fields
-        "change_1p": "N/A", # 1 period change (vs prev)
+        "change_1p": "N/A",  # 1 period change (vs prev)
         "change_1y": "N/A",
-        "change_5y": "N/A"
+        "change_5y": "N/A",
     }
 
     info = get_series_info(series_id, api_key)
-    
+
     # Calculate tailored limit based on frequency to optimize data fetching
     # We want ~10 years of data plus a small buffer (11 years)
-    tailored_limit = 132 # Default fallback (Monthly)
-    
+    tailored_limit = 132  # Default fallback (Monthly)
+
     if info:
         summary["title"] = info.get("title", series_id)
         summary["units"] = info.get("units") or ""
@@ -328,16 +332,20 @@ def get_series_summary(series_id: str, api_key: str) -> Dict[str, Any]:
             tailored_limit = 15
         elif "daily" in freq_str:
             summary["frequency"] = "D"
-            tailored_limit = 260 * 11 # ~2860
+            tailored_limit = 260 * 11  # ~2860
         elif "weekly" in freq_str:
             summary["frequency"] = "W"
-            tailored_limit = 52 * 11 # ~572
+            tailored_limit = 52 * 11  # ~572
         else:
             summary["frequency"] = "M"
-            tailored_limit = 12 * 11 # 132
+            tailored_limit = 12 * 11  # 132
 
         # Seasonal adjustment status
-        sa_str = info.get("seasonal_adjustment_short") or info.get("seasonal_adjustment") or ""
+        sa_str = (
+            info.get("seasonal_adjustment_short")
+            or info.get("seasonal_adjustment")
+            or ""
+        )
         if "seasonally adjusted" in sa_str.lower():
             summary["seasonal_adj"] = "SA"
 
@@ -379,9 +387,12 @@ def get_series_summary(series_id: str, api_key: str) -> Dict[str, Any]:
                     # allowed slack: within 30 days for 1Y/5Y comparison?
                     # Actually, for macro data, we usually just want the observation "about 1 year ago"
                     # Simple approach: minimize absolute difference in days
-                    if abs((d - target_date).days) < 45: # Close enough match (monthly data usually)
-                         return obs
-                except ValueError: continue
+                    if (
+                        abs((d - target_date).days) < 45
+                    ):  # Close enough match (monthly data usually)
+                        return obs
+                except ValueError:
+                    continue
             return None
 
         # 1 Year Ago
@@ -411,7 +422,7 @@ def get_series_summary(series_id: str, api_key: str) -> Dict[str, Any]:
             frequency=summary["frequency"],
             short_months=12,
             long_months=24,
-            z_lookback_years=10
+            z_lookback_years=10,
         )
         summary.update(enhanced)
 

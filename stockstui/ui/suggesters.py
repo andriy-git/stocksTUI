@@ -1,5 +1,6 @@
 from textual.suggester import Suggester
 
+
 class TickerSuggester(Suggester):
     """
     A custom suggester for ticker input fields. It formats suggestions as
@@ -18,11 +19,13 @@ class TickerSuggester(Suggester):
             case_sensitive: If True, matching will be case-sensitive. Defaults to False.
         """
         super().__init__(case_sensitive=case_sensitive)
-        self._items = items # Stores the original items
+        self._items = items  # Stores the original items
         # Pre-process items for case-insensitive comparison if needed
-        self._for_comparison = [
-            (item[0].casefold(), item[1].casefold()) for item in items
-        ] if not self.case_sensitive else items
+        self._for_comparison = (
+            [(item[0].casefold(), item[1].casefold()) for item in items]
+            if not self.case_sensitive
+            else items
+        )
 
     async def get_suggestion(self, value: str) -> str | None:
         """
@@ -49,9 +52,11 @@ class TickerSuggester(Suggester):
             if ticker_val.startswith(search_value):
                 original_ticker, original_desc = self._items[i]
                 # Format is "TICKER - Description - TICKER"
-                suggestion_text = f"{original_ticker} - {original_desc} - {original_ticker}"
+                suggestion_text = (
+                    f"{original_ticker} - {original_desc} - {original_ticker}"
+                )
                 # Return the remainder of the string for a clean autocomplete.
-                return suggestion_text[len(value):]
+                return suggestion_text[len(value) :]
 
         # --- Priority 2: Match within the description for discovery ---
         for i, (_, desc_val) in enumerate(self._for_comparison):

@@ -121,7 +121,9 @@ class TestAppNavigationActions(unittest.IsolatedAsyncioTestCase):
 
         # First call: looking for SearchBox -> raise the *real* NoMatches
         # Second call: looking for ConfigContainer -> return the container
-        self.app.query_one = MagicMock(side_effect=[NoMatches("no SearchBox"), mock_container])
+        self.app.query_one = MagicMock(
+            side_effect=[NoMatches("no SearchBox"), mock_container]
+        )
 
         self.app.action_back_or_dismiss()
 

@@ -1,4 +1,4 @@
-from textual.app import ComposeResult, on
+from textual.app import ComposeResult
 from textual.containers import Vertical
 from textual.widgets import Label, DataTable
 from textual.dom import NoMatches
@@ -11,21 +11,22 @@ from stockstui.data_providers import fred_provider
 from stockstui.ui.widgets.navigable_data_table import NavigableDataTable
 from stockstui.ui.edit_fred_series_modal import EditFredSeriesModal
 
+
 class FredDataTable(NavigableDataTable):
     """Specific DataTable for FRED view with overridden bindings."""
-    
+
     BINDINGS = [
         # Override 'e' - use 'screen.' prefix won't work. Instead define action here.
         Binding("e", "edit_series", "Edit Alias"),
         Binding("o", "open_series", "Open (Browser)"),
         Binding("backspace", "app.back_or_dismiss", "Back", show=False),
     ]
-    
+
     def action_edit_series(self):
         """Bubble edit_series action to parent FredView."""
         # Find the parent FredView and call its action
         for ancestor in self.ancestors:
-            if hasattr(ancestor, 'action_edit_series'):
+            if hasattr(ancestor, "action_edit_series"):
                 ancestor.action_edit_series()
                 return
 
@@ -33,9 +34,10 @@ class FredDataTable(NavigableDataTable):
         """Bubble open_series action to parent FredView."""
         # Find the parent FredView and call its action
         for ancestor in self.ancestors:
-            if hasattr(ancestor, 'action_open_series'):
+            if hasattr(ancestor, "action_open_series"):
                 ancestor.action_open_series()
                 return
+
 
 class FredView(Vertical):
     """View displaying a summary dashboard of configured FRED series."""
@@ -58,18 +60,18 @@ class FredView(Vertical):
         # Core signal block: Series, Current, YoY %, Roll-12, Roll-24, Z-10Y
         # Context block: 10Y Min, 10Y Max, % Range, Obs Date, Freq
         table.add_columns(
-            "Series",     # Title/alias
-            "Current",    # Most recent value
-            "YoY %",      # Year-over-year percent change
-            "Roll-12",    # 12-month rolling average
-            "Roll-24",    # 24-month rolling average
-            "Z-10Y",      # Z-score (10-year basis)
-            "10Y Min",    # 10-year historical minimum
-            "10Y Max",    # 10-year historical maximum
-            "% Range",    # Position in historical range
-            "Obs Date",   # Most recent observation date
-            "Freq",       # M/Q (monthly/quarterly)
-            "Units",      # Short units from FRED
+            "Series",  # Title/alias
+            "Current",  # Most recent value
+            "YoY %",  # Year-over-year percent change
+            "Roll-12",  # 12-month rolling average
+            "Roll-24",  # 24-month rolling average
+            "Z-10Y",  # Z-score (10-year basis)
+            "10Y Min",  # 10-year historical minimum
+            "10Y Max",  # 10-year historical maximum
+            "% Range",  # Position in historical range
+            "Obs Date",  # Most recent observation date
+            "Freq",  # M/Q (monthly/quarterly)
+            "Units",  # Short units from FRED
         )
         self.load_all_series()
         # NOTE: Do NOT call table.focus() here - it steals focus from Tabs.
@@ -92,20 +94,21 @@ class FredView(Vertical):
             row_key = table.coordinate_to_cell_key(table.cursor_coordinate).row_key
             if not row_key:
                 return
-             
+
             series_id = row_key.value
-            
+
             settings = self.app.config.settings.get("fred_settings", {})
             aliases = settings.get("series_aliases", {})
             current_alias = aliases.get(series_id, "")
-            
+
             def handle_edit(new_alias: str | None):
-                if new_alias is None: return 
-                
+                if new_alias is None:
+                    return
+
                 fred_settings = self.app.config.settings.get("fred_settings", {})
                 if "series_aliases" not in fred_settings:
                     fred_settings["series_aliases"] = {}
-                
+
                 if new_alias:
                     fred_settings["series_aliases"][series_id] = new_alias
                 else:
@@ -114,10 +117,12 @@ class FredView(Vertical):
 
                 self.app.config.settings["fred_settings"] = fred_settings
                 self.app.config.save_settings()
-                self.load_all_series() 
+                self.load_all_series()
                 self.app.notify(f"Updated alias for {series_id}")
-                
-            self.app.push_screen(EditFredSeriesModal(series_id, current_alias), handle_edit)
+
+            self.app.push_screen(
+                EditFredSeriesModal(series_id, current_alias), handle_edit
+            )
         except NoMatches:
             pass
 
@@ -131,15 +136,19 @@ class FredView(Vertical):
             row_key = table.coordinate_to_cell_key(table.cursor_coordinate).row_key
             if not row_key:
                 return
-             
+
             series_id = row_key.value
             url = f"https://fred.stlouisfed.org/series/{series_id}"
-            
+
             try:
                 self.app.notify(f"Opening FRED for {series_id}...")
                 webbrowser.open(url)
             except webbrowser.Error:
-                self.app.notify("No web browser found. Please configure your system's default browser.", severity="error", timeout=8)
+                self.app.notify(
+                    "No web browser found. Please configure your system's default browser.",
+                    severity="error",
+                    timeout=8,
+                )
             except Exception as e:
                 self.app.notify(f"Failed to open browser: {e}", severity="error")
         except NoMatches:
@@ -150,10 +159,10 @@ class FredView(Vertical):
         """Fetch summary data for all configured series."""
         settings = self.app.config.settings.get("fred_settings", {})
         api_key = settings.get("api_key")
-        
+
         if not api_key:
-             self.app.call_from_thread(self._show_error)
-             return
+            self.app.call_from_thread(self._show_error)
+            return
 
         series_list = settings.get("series_list", [])
         if not series_list:
@@ -161,7 +170,7 @@ class FredView(Vertical):
             return
 
         self.app.call_from_thread(self._set_loading, True)
-        
+
         summaries = []
         for series_id in series_list:
             # We fetching sequentially for now to be gentle on limited threads/connections
@@ -191,7 +200,9 @@ class FredView(Vertical):
             table = self.query_one("#fred-summary-table", DataTable)
             table.loading = False
             table.clear()
-            table.add_row("No series configured. Go to Configs > FRED Settings to add data.")
+            table.add_row(
+                "No series configured. Go to Configs > FRED Settings to add data."
+            )
         except NoMatches:
             pass
 
@@ -225,13 +236,17 @@ class FredView(Vertical):
                 if isinstance(current_val, (int, float)):
                     current_text = Text(f"{current_val:,.2f}", justify="right")
                 else:
-                    current_text = Text(str(current_val), justify="right", style=text_muted)
+                    current_text = Text(
+                        str(current_val), justify="right", style=text_muted
+                    )
 
                 # Helper to format percentage values with color
                 def format_pct(val, show_sign=True):
                     if val is None:
                         return Text("N/A", justify="right", style=text_muted)
-                    color = success_color if val > 0 else (error_color if val < 0 else "")
+                    color = (
+                        success_color if val > 0 else (error_color if val < 0 else "")
+                    )
                     prefix = "+" if val > 0 and show_sign else ""
                     return Text(f"{prefix}{val:.1f}%", style=color, justify="right")
 
@@ -286,8 +301,10 @@ class FredView(Vertical):
                     format_pct_range(item.get("pct_of_range")),
                     date_text,
                     freq_text,
-                    Text(item.get("units_short") or item.get("units", ""), justify="left"),
-                    key=series_id
+                    Text(
+                        item.get("units_short") or item.get("units", ""), justify="left"
+                    ),
+                    key=series_id,
                 )
 
             # Set initial cursor position if table is empty cursor-wise

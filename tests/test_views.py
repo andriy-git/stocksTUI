@@ -13,8 +13,10 @@ from stockstui.ui.views.config_view import ConfigContainer
 from stockstui.ui.views.config_views.lists_config_view import ListsConfigView
 from stockstui.presentation import formatter
 
+
 class ViewsTestApp(App):
     """A minimal app for testing individual views."""
+
     def __init__(self, view_to_test):
         super().__init__()
         self.view_to_test = view_to_test
@@ -22,8 +24,8 @@ class ViewsTestApp(App):
         self.config = MagicMock()
         self.config.lists.values.return_value = []
         self.config.get_setting.return_value = "default_theme"
-        self.config.themes = { "default_theme": {"palette": {}} }
-        self.config.settings = {'theme': 'default_theme', 'auto_refresh': False}
+        self.config.themes = {"default_theme": {"palette": {}}}
+        self.config.settings = {"theme": "default_theme", "auto_refresh": False}
         self.cli_overrides = {}
         self.news_ticker = None
         self._news_content_for_ticker = None
@@ -38,7 +40,7 @@ class ViewsTestApp(App):
 
     def on_mount(self):
         # Correctly register a valid Theme object before mounting.
-        default_theme = Theme( name="default_theme", primary="blue", dark=True)
+        default_theme = Theme(name="default_theme", primary="blue", dark=True)
         self.register_theme(default_theme)
         self.mount(self.view_to_test)
 
@@ -60,6 +62,7 @@ class ViewsTestApp(App):
         except Exception:
             pass
 
+
 class TestDebugView(unittest.IsolatedAsyncioTestCase):
     """Unit tests for the DebugView."""
 
@@ -67,14 +70,21 @@ class TestDebugView(unittest.IsolatedAsyncioTestCase):
         """Test that the view correctly populates its table on message."""
         view = DebugView()
         app = ViewsTestApp(view)
-        
+
         async with app.run_test() as pilot:
             await pilot.click("#debug-test-tickers")
             await pilot.pause()
-            
+
             message = TickerDebugDataUpdated(
-                data=[{"symbol": "AAPL", "is_valid": True, "description": "Apple", "latency": 0.5}],
-                total_time=0.5
+                data=[
+                    {
+                        "symbol": "AAPL",
+                        "is_valid": True,
+                        "description": "Apple",
+                        "latency": 0.5,
+                    }
+                ],
+                total_time=0.5,
             )
             app.post_message(message)
             await pilot.pause()
@@ -82,6 +92,7 @@ class TestDebugView(unittest.IsolatedAsyncioTestCase):
             table = view.query_one(DataTable)
             self.assertEqual(table.row_count, 1)
             self.assertEqual(str(table.get_cell_at((0, 0))), "AAPL")
+
 
 class TestNewsView(unittest.IsolatedAsyncioTestCase):
     """Unit tests for the NewsView."""
@@ -97,7 +108,7 @@ class TestNewsView(unittest.IsolatedAsyncioTestCase):
             await pilot.pause()
             app.fetch_news.assert_called_once_with("TSLA")
 
-    @patch('webbrowser.open')
+    @patch("webbrowser.open")
     async def test_news_view_link_navigation(self, mock_webbrowser_open):
         """Test cycling through and opening links in the news view."""
         view = NewsView()
@@ -109,26 +120,27 @@ class TestNewsView(unittest.IsolatedAsyncioTestCase):
             urls = ["link1", "link2"]
             view.update_content(markdown_content, urls)
             await pilot.pause()
-            
+
             # Cycle forward
             await pilot.press("tab")
             self.assertEqual(view._current_link_index, 0)
             await pilot.press("tab")
             self.assertEqual(view._current_link_index, 1)
-            await pilot.press("tab") # Wraps around
+            await pilot.press("tab")  # Wraps around
             self.assertEqual(view._current_link_index, 0)
 
             # Cycle backward
-            await pilot.press("shift+tab") # Wraps around
+            await pilot.press("shift+tab")  # Wraps around
             self.assertEqual(view._current_link_index, 1)
 
             # Open link
             await pilot.press("enter")
             mock_webbrowser_open.assert_called_once_with("link2")
 
+
 class TestConfigContainer(unittest.IsolatedAsyncioTestCase):
     """Unit tests for the main ConfigContainer."""
-    
+
     async def test_config_container_navigation(self):
         """Test the view switching and history logic."""
         container = ConfigContainer()
@@ -140,10 +152,11 @@ class TestConfigContainer(unittest.IsolatedAsyncioTestCase):
             container.show_lists()
             await pilot.pause()
             self.assertEqual(container.query_one("ContentSwitcher").current, "lists")
-            
+
             container.action_go_back()
             await pilot.pause()
             self.assertEqual(container.query_one("ContentSwitcher").current, "main")
+
 
 class TestListsConfigView(unittest.IsolatedAsyncioTestCase):
     """Unit tests for the ListsConfigView."""
@@ -152,10 +165,10 @@ class TestListsConfigView(unittest.IsolatedAsyncioTestCase):
         """Test that the list and ticker tables populate from app config."""
         view = ListsConfigView()
         app = ViewsTestApp(view)
-        
+
         app.config.lists = {
             "stocks": [{"ticker": "AAPL", "alias": "Apple"}],
-            "crypto": [{"ticker": "BTC-USD", "alias": "Bitcoin"}]
+            "crypto": [{"ticker": "BTC-USD", "alias": "Bitcoin"}],
         }
         app.active_list_category = "stocks"
 
