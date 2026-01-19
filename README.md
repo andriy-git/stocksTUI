@@ -52,7 +52,7 @@ A fast, minimalist terminal app for checking stock prices, crypto, news, and his
 
 ## 🛠 Requirements
 
-*   **Python** 3.9 or newer
+*   **Python** 3.10 or newer
 *   **OS Support:**
 
     *   **Linux / macOS** — Fully supported
