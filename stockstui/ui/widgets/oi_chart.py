@@ -135,7 +135,7 @@ class OIChart(PlotextPlot):
 
         # Plot
         # Format labels
-        labels = [f"{int(s)}" if s.is_integer() else f"{s:.1f}" for s in strikes]
+        labels = [f"{int(s)}" if float(s).is_integer() else f"{s:.1f}" for s in strikes]
 
         # Declutter X-axis if too many labels
         if len(labels) > 15:
@@ -203,10 +203,14 @@ class OIChart(PlotextPlot):
                     return "0"
                 if n >= 1_000_000:
                     val = n / 1_000_000
-                    return f"{int(val)}M" if val.is_integer() else f"{val:.1f}M"
+                    return (
+                        f"{int(val)}M" if float(val).is_integer() else f"{val:.1f}M"
+                    )
                 if n >= 1_000:
                     val = n / 1_000
-                    return f"{int(val)}K" if val.is_integer() else f"{val:.1f}K"
+                    return (
+                        f"{int(val)}K" if float(val).is_integer() else f"{val:.1f}K"
+                    )
                 return str(int(n))
 
             plt.yticks(ticks, [format_large_num(t) for t in ticks])
