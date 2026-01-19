@@ -18,16 +18,19 @@ find "$PROJECT_DIR/stockstui" -type d -name "__pycache__" -exec rm -rf {} +
 find "$PROJECT_DIR/stockstui" -type f -name "*.pyc" -delete
 
 # 1. Set up Python virtual environment
-if [ -d "$VENV_DIR" ]; then
-  echo "Virtual environment already exists. Skipping creation."
+if [ -d "$PROJECT_DIR/.venv" ]; then
+  VENV_DIR="$PROJECT_DIR/.venv"
+  echo "Found existing virtual environment at .venv"
+elif [ -d "$PROJECT_DIR/venv" ]; then
+  VENV_DIR="$PROJECT_DIR/venv"
+  echo "Found existing virtual environment at venv"
 else
+  VENV_DIR="$PROJECT_DIR/.venv"
   echo "Creating Python virtual environment at $VENV_DIR..."
   python3 -m venv "$VENV_DIR"
 fi
 
 # 2. Install dependencies from pyproject.toml in editable mode
-# The '-e' flag means changes to your .py files will be reflected immediately.
-# The '.' tells pip to install the project in the current directory.
 echo "Installing project in editable mode..."
 "$VENV_DIR/bin/pip" install -e .
 
