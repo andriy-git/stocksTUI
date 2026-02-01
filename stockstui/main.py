@@ -2560,7 +2560,7 @@ class StocksTUI(App):
     def _fetch_and_show_ticker_info(self, ticker: str, isin: str | None) -> None:
         """Background worker to fetch ticker info and show modal."""
         try:
-            from stockstui.data_providers.etf_metadata_provider import get_etf_metadata
+            from stockstui.data_providers.ticker_info_provider import get_etf_metadata
 
             metadata = get_etf_metadata(
                 isin=isin, ticker=ticker, db_manager=self.db_manager

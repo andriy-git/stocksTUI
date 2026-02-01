@@ -5,7 +5,7 @@ Unit tests for the ticker metadata provider.
 import unittest
 from unittest.mock import MagicMock, patch
 
-from stockstui.data_providers.etf_metadata_provider import (
+from stockstui.data_providers.ticker_info_provider import (
     FETCHERS,
     BaseFetcher,
     TickerMetadata,
