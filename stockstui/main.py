@@ -879,6 +879,8 @@ class StocksTUI(App):
         """
         Refreshes price data for the current view.
         """
+        if force:
+            self.db_manager.clear_etf_metadata_cache()
         category = self.get_active_category()
         if category and category not in [
             "history",

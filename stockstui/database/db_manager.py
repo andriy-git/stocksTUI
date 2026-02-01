@@ -307,6 +307,21 @@ class DbManager:
         except sqlite3.Error as e:
             logging.error(f"Failed to save ETF metadata for {isin}: {e}")
 
+    def clear_etf_metadata_cache(self):
+        """Clears all ETF metadata from the cache."""
+        if not self.conn:
+            return
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("DELETE FROM etf_metadata")
+            self.conn.commit()
+            if cursor.rowcount > 0:
+                logging.info(
+                    f"Cleared {cursor.rowcount} entries from ETF metadata cache"
+                )
+        except sqlite3.Error as e:
+            logging.error(f"Failed to clear ETF metadata cache: {e}")
+
     # --- Option Positions Methods ---
 
     def save_option_position(
