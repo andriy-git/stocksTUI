@@ -14,6 +14,9 @@ CACHE_PRUNE_EXPIRY_SECONDS = 604800  # 7 days
 # Ticker info (exchange, name) changes very rarely. Cache it for a long time.
 INFO_CACHE_EXPIRY_SECONDS = 86400 * 30  # 30 days
 
+# ETF metadata (TER, etc.) changes very rarely. Cache for 30 days.
+ETF_METADATA_CACHE_EXPIRY_SECONDS = 86400 * 30  # 30 days
+
 
 class DbManager:
     """
@@ -72,6 +75,14 @@ class DbManager:
                     timestamp REAL NOT NULL
                 )
             """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS etf_metadata (
+                    isin TEXT PRIMARY KEY,
+                    ticker TEXT,
+                    data TEXT NOT NULL,
+                    timestamp REAL NOT NULL
+                )
+            """)
             self.conn.commit()
         except sqlite3.Error as e:
             logging.error(f"Failed to create database tables: {e}")
@@ -105,6 +116,17 @@ class DbManager:
             if cursor.rowcount > 0:
                 logging.info(
                     f"Pruned {cursor.rowcount} expired entries from the info cache."
+                )
+
+            etf_prune_ts = (
+                datetime.now(timezone.utc).timestamp() - ETF_METADATA_CACHE_EXPIRY_SECONDS
+            )
+            cursor.execute(
+                "DELETE FROM etf_metadata WHERE timestamp < ?", (etf_prune_ts,)
+            )
+            if cursor.rowcount > 0:
+                logging.info(
+                    f"Pruned {cursor.rowcount} expired entries from the ETF metadata cache."
                 )
 
             self.conn.commit()
@@ -234,6 +256,52 @@ class DbManager:
         except sqlite3.Error as e:
             logging.error(f"Failed to save info cache to database: {e}")
             self.conn.rollback()
+
+    # --- ETF Metadata Methods ---
+
+    def get_etf_metadata(self, isin: str) -> dict | None:
+        """
+        Retrieves cached ETF metadata for the given ISIN.
+        Returns None if not found or expired.
+        """
+        if not self.conn or not isin:
+            return None
+        try:
+            cursor = self.conn.cursor()
+            expiry_ts = datetime.now(timezone.utc).timestamp() - ETF_METADATA_CACHE_EXPIRY_SECONDS
+            cursor.execute(
+                "SELECT data, timestamp FROM etf_metadata WHERE isin = ? AND timestamp >= ?",
+                (isin.upper(), expiry_ts),
+            )
+            row = cursor.fetchone()
+            if row:
+                try:
+                    return json.loads(row[0])
+                except json.JSONDecodeError:
+                    logging.warning(f"Failed to decode ETF metadata for {isin}")
+            return None
+        except sqlite3.Error as e:
+            logging.error(f"Failed to get ETF metadata for {isin}: {e}")
+            return None
+
+    def save_etf_metadata(self, isin: str, ticker: str | None, metadata: dict):
+        """Saves ETF metadata to the cache."""
+        if not self.conn or not isin or not metadata:
+            return
+        try:
+            cursor = self.conn.cursor()
+            timestamp = datetime.now(timezone.utc).timestamp()
+            cursor.execute(
+                """
+                INSERT OR REPLACE INTO etf_metadata (isin, ticker, data, timestamp)
+                VALUES (?, ?, ?, ?)
+                """,
+                (isin.upper(), ticker, json.dumps(metadata), timestamp),
+            )
+            self.conn.commit()
+            logging.info(f"Saved ETF metadata for {isin}")
+        except sqlite3.Error as e:
+            logging.error(f"Failed to save ETF metadata for {isin}: {e}")
 
     # --- Option Positions Methods ---
 

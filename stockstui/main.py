@@ -61,6 +61,7 @@ from stockstui.data_providers.portfolio import PortfolioManager
 from stockstui.ui.widgets.search_box import SearchBox
 from stockstui.ui.widgets.tag_filter import TagFilterWidget, TagFilterChanged
 from stockstui.ui.quick_edit_ticker_modal import QuickEditTickerModal
+from stockstui.ui.etf_info_modal import TickerInfoModal, extract_isin_from_note
 
 # Import the new container instead of the old view
 from stockstui.ui.views.config_view import ConfigContainer
@@ -160,6 +161,7 @@ class StocksTUI(App):
         Binding("f", "toggle_tag_filter", "Filter", show=True),
         Binding("?", "toggle_help", "Toggle Help", show=True),
         Binding("i", "focus_input", "Input", show=False),
+        Binding("g", "show_etf_info", "Info", show=True),
         Binding("enter", "activate_tab", "Activate Tab", show=False),
         Binding("d", "handle_sort_key('d')", "Sort by Description/Date", show=False),
         Binding("p", "handle_sort_key('p')", "Sort by Price", show=False),
@@ -2494,6 +2496,92 @@ class StocksTUI(App):
 
         except NoMatches:
             self.bell()
+
+    def action_show_etf_info(self) -> None:
+        """Shows ticker info (ETF or stock) for the currently selected ticker."""
+        if self._sort_mode:
+            return
+
+        category = self.get_active_category()
+        if not category or category in [
+            "history",
+            "news",
+            "options",
+            "debug",
+            "configs",
+        ]:
+            self.bell()
+            return
+
+        try:
+            price_table = self.query_one("#price-table", DataTable)
+            if price_table.cursor_row < 0:
+                self.notify("Select a ticker first.", severity="warning")
+                return
+
+            coordinate = Coordinate(row=price_table.cursor_row, column=0)
+            ticker_val = price_table.coordinate_to_cell_key(coordinate).row_key.value
+            if not ticker_val:
+                self.notify("Invalid ticker selected.", severity="error")
+                return
+            ticker = ticker_val
+
+            # Try to get ISIN from config (for EU ETFs)
+            isin = None
+            ticker_data = self._find_ticker_in_config(ticker, category)
+            if ticker_data:
+                isin = ticker_data.get("isin") or extract_isin_from_note(
+                    ticker_data.get("note")
+                )
+
+            self._fetch_and_show_ticker_info(ticker, isin)
+
+        except NoMatches:
+            self.bell()
+
+    def _find_ticker_in_config(self, ticker: str, category: str) -> dict | None:
+        """Find ticker data in config lists."""
+        if category == "all":
+            hidden_tabs = set(self.config.get_setting("hidden_tabs", []))
+            for list_name, list_data in self.config.lists.items():
+                if list_name not in hidden_tabs:
+                    for item in list_data:
+                        if item.get("ticker", "").upper() == ticker.upper():
+                            return item
+        else:
+            for item in self.config.lists.get(category, []):
+                if item.get("ticker", "").upper() == ticker.upper():
+                    return item
+        return None
+
+    @work(exclusive=True, thread=True)
+    def _fetch_and_show_ticker_info(self, ticker: str, isin: str | None) -> None:
+        """Background worker to fetch ticker info and show modal."""
+        try:
+            from stockstui.data_providers.etf_metadata_provider import get_etf_metadata
+
+            metadata = get_etf_metadata(
+                isin=isin, ticker=ticker, db_manager=self.db_manager
+            )
+
+            if metadata:
+                self.app.call_from_thread(
+                    self.push_screen,
+                    TickerInfoModal(ticker=ticker, metadata=metadata.to_dict()),
+                )
+            else:
+                self.app.call_from_thread(
+                    self.push_screen,
+                    TickerInfoModal(
+                        ticker=ticker, error="Could not fetch ticker info."
+                    ),
+                )
+        except Exception as e:
+            logging.error(f"Error fetching ticker info: {e}")
+            self.app.call_from_thread(
+                self.push_screen,
+                TickerInfoModal(ticker=ticker, error=f"Error: {str(e)}"),
+            )
 
     @on(TagFilterChanged)
     def on_tag_filter_changed(self, message: TagFilterChanged) -> None:
