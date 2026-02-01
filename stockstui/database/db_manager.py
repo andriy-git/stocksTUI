@@ -119,7 +119,8 @@ class DbManager:
                 )
 
             etf_prune_ts = (
-                datetime.now(timezone.utc).timestamp() - ETF_METADATA_CACHE_EXPIRY_SECONDS
+                datetime.now(timezone.utc).timestamp()
+                - ETF_METADATA_CACHE_EXPIRY_SECONDS
             )
             cursor.execute(
                 "DELETE FROM etf_metadata WHERE timestamp < ?", (etf_prune_ts,)
@@ -268,7 +269,10 @@ class DbManager:
             return None
         try:
             cursor = self.conn.cursor()
-            expiry_ts = datetime.now(timezone.utc).timestamp() - ETF_METADATA_CACHE_EXPIRY_SECONDS
+            expiry_ts = (
+                datetime.now(timezone.utc).timestamp()
+                - ETF_METADATA_CACHE_EXPIRY_SECONDS
+            )
             cursor.execute(
                 "SELECT data, timestamp FROM etf_metadata WHERE isin = ? AND timestamp >= ?",
                 (isin.upper(), expiry_ts),
