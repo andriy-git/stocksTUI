@@ -363,6 +363,8 @@ class StocksTUI(App):
                 start_category = "options"
                 if isinstance(cli_options, str):
                     self.options_ticker = cli_options
+            elif self.cli_overrides.get("fred"):
+                start_category = "fred"
             elif self.cli_overrides.get("debug"):
                 start_category = "debug"
             elif self.cli_overrides.get("configs"):

@@ -98,6 +98,9 @@ def create_arg_parser() -> argparse.ArgumentParser:
         help="Start on the Options tab. Optionally provide a ticker.",
     )
     view_group.add_argument(
+        "--fred", action="store_true", help="Start on the FRED tab."
+    )
+    view_group.add_argument(
         "--debug", action="store_true", help="Start on the Debug tab."
     )
     view_group.add_argument(
