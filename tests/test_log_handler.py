@@ -12,6 +12,8 @@ class TestLogHandler(unittest.TestCase):
         """Test that emitting log records calls the app's notify method."""
         mock_app = MagicMock()
         mock_app.notify = MagicMock()
+        mock_app.config = MagicMock()
+        mock_app.config.get_setting = MagicMock(return_value=False)
 
         handler = TextualHandler(app=mock_app)
         handler.setFormatter(logging.Formatter("%(message)s"))
@@ -50,4 +52,24 @@ class TestLogHandler(unittest.TestCase):
         )
 
         # Prevent logs from propagating to the root logger in the test runner
+        logger.removeHandler(handler)
+
+    def test_log_emit_suppressed(self):
+        """Test that logs are suppressed when config setting is enabled."""
+        mock_app = MagicMock()
+        mock_app.notify = MagicMock()
+        mock_app.config = MagicMock()
+        mock_app.config.get_setting = MagicMock(return_value=True)
+
+        handler = TextualHandler(app=mock_app)
+        handler.setFormatter(logging.Formatter("%(message)s"))
+
+        logger = logging.getLogger("test_logger_suppressed")
+        logger.setLevel(logging.INFO)
+        logger.addHandler(handler)
+
+        # This should not call notify
+        logger.info("Should be suppressed.")
+        mock_app.call_from_thread.assert_not_called()
+
         logger.removeHandler(handler)
