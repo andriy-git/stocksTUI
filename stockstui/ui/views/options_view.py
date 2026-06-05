@@ -16,6 +16,8 @@ from textual.binding import Binding
 from stockstui.ui.suggesters import TickerSuggester
 from stockstui.ui.position_modal import PositionModal
 from stockstui.ui.widgets.oi_chart import OIChart
+from stockstui.data_providers import market_provider
+from stockstui.presentation.formatter import get_currency_symbol
 
 
 class OptionsView(Vertical):
@@ -132,6 +134,11 @@ class OptionsView(Vertical):
             # Get underlying price for ITM/OTM calculations
             underlying_price = underlying_data.get("regularMarketPrice", 0)
 
+            # Resolve currency code from underlying info cache or provider
+            info = market_provider.get_ticker_info(self.app.options_ticker) if self.app.options_ticker else None
+            currency_code = info.get("currency", "USD") if info else "USD"
+            sym = get_currency_symbol(currency_code)
+
             # Calculate days to expiration
             from datetime import datetime
 
@@ -143,7 +150,7 @@ class OptionsView(Vertical):
                 days_to_exp = None
 
             # Create info header
-            info_text = f"Underlying: ${underlying_price:.2f}"
+            info_text = f"Underlying: {sym}{underlying_price:.2f}"
             if days_to_exp is not None:
                 info_text += f"  |  Days to Expiration: {days_to_exp}"
             info_header = Static(info_text, classes="options-info-header")
@@ -212,7 +219,7 @@ class OptionsView(Vertical):
                         )
 
                     # Format strike
-                    strike_text = Text(f"${strike:.2f}")
+                    strike_text = Text(f"{sym}{strike:.2f}")
                     if is_itm:
                         strike_text.stylize(f"bold {success_color}")
 
@@ -221,9 +228,9 @@ class OptionsView(Vertical):
                         strike_text.stylize(f"bold {accent_color} reverse")
 
                     last_price = row.get("lastPrice", 0)
-                    last_text = f"${last_price:.2f}"
-                    bid = f"${row.get('bid', 0):.2f}"
-                    ask = f"${row.get('ask', 0):.2f}"
+                    last_text = f"{sym}{last_price:.2f}"
+                    bid = f"{sym}{row.get('bid', 0):.2f}"
+                    ask = f"{sym}{row.get('ask', 0):.2f}"
 
                     # % Change
                     pct_change_val = row.get("percentChange", 0)
@@ -273,7 +280,7 @@ class OptionsView(Vertical):
                         # P/L = (Current Price - Avg Cost) * Qty * 100
                         current_val = last_price
                         pl_val = (current_val - avg_cost) * qty * 100
-                        pl_text = Text(f"${pl_val:,.0f}")
+                        pl_text = Text(f"{sym}{pl_val:,.0f}")
                         if pl_val > 0:
                             pl_text.stylize(success_color)
                         elif pl_val < 0:
@@ -313,7 +320,7 @@ class OptionsView(Vertical):
             # --- CHART VIEW ---
             chart_container = Container(id="options-chart-view")
             chart = OIChart(
-                calls_df, puts_df, underlying_price, ticker=self.app.options_ticker
+                calls_df, puts_df, underlying_price, ticker=self.app.options_ticker, currency_symbol=sym
             )
 
             # Mount switcher to display_container FIRST (top of hierarchy)
