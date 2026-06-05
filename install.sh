@@ -14,8 +14,8 @@ echo "Starting development installation for StocksTUI..."
 
 # 0. Clean cache files in stockstui dir
 echo "Cleaning cache files in stockstui..."
-find "$PROJECT_DIR/stockstui" -type d -name "__pycache__" -exec rm -rf {} +
-find "$PROJECT_DIR/stockstui" -type f -name "*.pyc" -delete
+find "$PROJECT_DIR" -path "*/venv" -prune -o -path "*/.venv" -prune -o -type d -name "__pycache__" -exec rm -rf {} +
+find "$PROJECT_DIR" -path "*/venv" -prune -o -path "*/.venv" -prune -o -type f -name "*.pyc" -exec rm -f {} +
 
 # 1. Set up Python virtual environment
 if [ -d "$PROJECT_DIR/.venv" ]; then
