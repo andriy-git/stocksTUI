@@ -17,6 +17,9 @@ class GeneralConfigView(Vertical):
 
     def compose(self) -> ComposeResult:
         """Creates the layout for the general configuration view."""
+        auto_refresh = self.app.config.get_setting("auto_refresh", False)
+        suppress_logs = self.app.config.get_setting("suppress_tui_logs", False)
+
         with Horizontal(id="top-config-container"):
             # Left side for general application settings
             with Vertical(id="general-settings-container"):
@@ -59,7 +62,10 @@ class GeneralConfigView(Vertical):
                     )
                 with Horizontal(classes="config-option-horizontal"):
                     yield Label("Auto Refresh:", classes="config-label")
-                    yield Switch(id="auto-refresh-switch")
+                    yield Switch(value=auto_refresh, id="auto-refresh-switch")
+                with Horizontal(classes="config-option-horizontal"):
+                    yield Label("Suppress TUI\nLogs:", classes="config-label")
+                    yield Switch(value=suppress_logs, id="suppress-tui-logs-switch")
                 with Horizontal(classes="config-option-horizontal"):
                     yield Label("Refresh\nInterval (s):", classes="config-label")
                     yield Input(
@@ -73,7 +79,11 @@ class GeneralConfigView(Vertical):
 
     def on_mount(self) -> None:
         """Called when the view is mounted."""
-        self.repopulate_visible_tabs()
+        self._loading = True
+        try:
+            self.repopulate_visible_tabs()
+        finally:
+            self._loading = False
 
     def repopulate_visible_tabs(self):
         """Populates the visible tabs list view."""
@@ -137,13 +147,27 @@ class GeneralConfigView(Vertical):
     @on(Switch.Changed, "#auto-refresh-switch")
     def on_switch_changed(self, event: Switch.Changed):
         """Handles changes to the 'Auto Refresh' switch."""
+        if getattr(self, "_loading", False):
+            return
         self.app.config.settings["auto_refresh"] = event.value
         self.app.config.save_settings()
         self.app._manage_price_refresh_timer()
 
+    @on(Switch.Changed, "#suppress-tui-logs-switch")
+    def on_suppress_logs_switch_changed(self, event: Switch.Changed):
+        """Handles changes to the 'Suppress TUI Logs' switch."""
+        if getattr(self, "_loading", False):
+            return
+        self.app.config.settings["suppress_tui_logs"] = event.value
+        self.app.config.save_settings()
+        # No immediate action needed as the handler checks config on emit
+
+
     @on(Select.Changed)
     def on_select_changed(self, event: Select.Changed):
         """Handles changes to Select widgets (Default Tab, Theme, Market Calendar)."""
+        if getattr(self, "_loading", False):
+            return
         if event.value is Select.BLANK:
             return
 
@@ -163,6 +187,8 @@ class GeneralConfigView(Vertical):
     @on(Switch.Changed)
     async def on_tab_visibility_toggled(self, event: Switch.Changed):
         """Handles changes to tab visibility switches."""
+        if getattr(self, "_loading", False):
+            return
         if "tab-switch" not in event.switch.classes:
             return
 
