@@ -1,5 +1,5 @@
 from textual.containers import Vertical, Horizontal, ScrollableContainer
-from textual.widgets import Button, DataTable, Input, Label
+from textual.widgets import Button, DataTable, Input, Label, Switch
 from textual.app import ComposeResult, on
 from textual.dom import NoMatches
 from textual.binding import Binding
@@ -21,8 +21,19 @@ class FredConfigView(ScrollableContainer):
 
     def compose(self) -> ComposeResult:
         """Creates the layout for the FRED configuration view."""
+        # WORKAROUND: Initialize the switch value dynamically using the actual
+        # configuration state of the FRED tab. Doing this in compose prevents a mount-time
+        # change from False (default) to True (if visible) from posting a Switch.Changed
+        # event. Otherwise, the event runs asynchronously after mount and triggers an
+        # unwanted _rebuild_app call, which overrides the startup/default tab.
+        hidden_tabs = self.app.config.get_setting("hidden_tabs", [])
+        show_fred = "fred" not in hidden_tabs
+
         # Top section for API Key
         yield Label("FRED Settings", classes="config-header")
+        with Horizontal(classes="config-option-horizontal"):
+            yield Label("Show FRED Tab:", classes="config-label")
+            yield Switch(value=show_fred, id="fred-visibility-switch")
         with Horizontal(classes="config-option-horizontal"):
             yield Label("API Key:", classes="config-label")
             yield Input(
@@ -42,15 +53,21 @@ class FredConfigView(ScrollableContainer):
 
     def on_mount(self) -> None:
         """Called when the view is mounted."""
-        table = self.query_one("#fred-series-table", DataTable)
-        table.add_columns("Series ID", "Alias", "Description")
-        self.repopulate_settings()
-        self.repopulate_series_table()
+        self._loading = True
+        try:
+            table = self.query_one("#fred-series-table", DataTable)
+            table.add_columns("Series ID", "Alias", "Description")
+            self.repopulate_settings()
+            self.repopulate_series_table()
+        finally:
+            self._loading = False
 
     def repopulate_settings(self):
         """Populate generic settings."""
         settings = self.app.config.settings.get("fred_settings", {})
         self.query_one("#fred-api-key-input", Input).value = settings.get("api_key", "")
+        hidden_tabs = self.app.config.get_setting("hidden_tabs", [])
+        self.query_one("#fred-visibility-switch", Switch).value = "fred" not in hidden_tabs
 
     def repopulate_series_table(self):
         """Populate the series DataTable with descriptions (cached or from API)."""
@@ -177,6 +194,8 @@ class FredConfigView(ScrollableContainer):
     @on(Button.Pressed, "#save-fred-api-key")
     def on_save_api_key(self):
         """Saves the API Key."""
+        if getattr(self, "_loading", False):
+            return
         key = self.query_one("#fred-api-key-input", Input).value.strip()
         fred_settings = self.app.config.settings.get("fred_settings", {})
         fred_settings["api_key"] = key
@@ -187,6 +206,22 @@ class FredConfigView(ScrollableContainer):
         self.app.config.settings["fred_settings"] = fred_settings
         self.app.config.save_settings()
         self.app.notify("FRED API Key saved.")
+
+    @on(Switch.Changed, "#fred-visibility-switch")
+    async def on_fred_visibility_changed(self, event: Switch.Changed):
+        """Handles toggling the FRED tab visibility."""
+        if getattr(self, "_loading", False):
+            return
+        hidden_tabs = self.app.config.get_setting("hidden_tabs", [])
+        if event.value:
+            if "fred" in hidden_tabs:
+                hidden_tabs.remove("fred")
+        else:
+            if "fred" not in hidden_tabs:
+                hidden_tabs.append("fred")
+        self.app.config.settings["hidden_tabs"] = hidden_tabs
+        self.app.config.save_settings()
+        await self.app._rebuild_app("configs", config_sub_view="fred")
 
     @on(Button.Pressed, "#add-fred-series")
     def on_add_series(self):
