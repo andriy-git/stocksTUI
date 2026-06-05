@@ -129,7 +129,9 @@ def get_market_price_data(
     if live_prices:
         for ticker, fast_data_update in live_prices.items():
             if ticker in _price_cache and "data" in _price_cache[ticker]:
-                _price_cache[ticker]["data"].update(fast_data_update)
+                # Filter out None values to prevent overwriting valid cached data (fallback)
+                valid_updates = {k: v for k, v in fast_data_update.items() if v is not None}
+                _price_cache[ticker]["data"].update(valid_updates)
 
     # Now that the cache is updated, construct the final list from it.
     final_data = []
@@ -155,6 +157,7 @@ def _fetch_and_cache_slow_data(tickers: list[str]):
             if slow_info and slow_info.get("currency"):
                 exchange = slow_info.get("exchange", "NYSE")
                 _info_cache[ticker] = {
+                    "currency": slow_info.get("currency"),
                     "exchange": exchange,
                     "shortName": slow_info.get("shortName"),
                     "longName": slow_info.get("longName"),
@@ -163,6 +166,7 @@ def _fetch_and_cache_slow_data(tickers: list[str]):
                     "expiry": _calculate_info_expiry(exchange),
                     "data": {
                         "symbol": ticker,
+                        "currency": fast_info.get("currency", slow_info.get("currency", "USD")),
                         "description": slow_info.get("longName", ticker),
                         "price": fast_info.get("lastPrice")
                         or slow_info.get("currentPrice"),
@@ -213,6 +217,7 @@ def _fetch_fast_data(tickers: list[str]) -> dict:
             fast_info = ticker_objects.tickers[ticker].fast_info
             if fast_info and fast_info.get("lastPrice"):
                 live_prices[ticker] = {
+                    "currency": fast_info.get("currency"),
                     "price": fast_info.get("lastPrice"),
                     "day_low": fast_info.get("dayLow"),
                     "day_high": fast_info.get("dayHigh"),
@@ -234,6 +239,7 @@ def get_ticker_info(ticker: str) -> dict | None:
             _info_cache[ticker] = {}
             return None
         _info_cache[ticker] = {
+            "currency": info.get("currency"),
             "exchange": info.get("exchange"),
             "shortName": info.get("shortName"),
             "longName": info.get("longName"),
@@ -354,6 +360,7 @@ def get_historical_data(ticker: str, period: str, interval: str = "1d"):
         data = yf.Ticker(ticker).history(period=period, interval=interval)
         if not data.empty:
             data.attrs["symbol"] = ticker.upper()
+            data.attrs["currency"] = info.get("currency")
         return data
     except Exception as e:
         # HACK: yfinance sometimes raises errors for valid tickers with no data in range.
