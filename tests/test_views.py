@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, AsyncMock
 
 from textual.app import App
 from textual.widgets import DataTable
@@ -35,7 +35,7 @@ class ViewsTestApp(App):
         self.active_list_category = "stocks"
         self.market_status_timer = None
         self.fetch_market_status = MagicMock()
-        self._rebuild_app = MagicMock()
+        self._rebuild_app = AsyncMock()
         self._manage_price_refresh_timer = MagicMock()
 
     def on_mount(self):
