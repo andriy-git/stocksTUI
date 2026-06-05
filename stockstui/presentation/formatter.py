@@ -4,6 +4,27 @@ from dateutil.tz import gettz
 from rich.text import Text
 from stockstui.ui.widgets.navigable_data_table import NavigableDataTable
 
+CURRENCY_SYMBOLS = {
+    "USD": "$",
+    "EUR": "€",
+    "GBP": "£",
+    "JPY": "¥",
+    "CAD": "C$",
+    "AUD": "A$",
+    "CHF": "CHF",
+    "CNY": "¥",
+    "HKD": "HK$",
+    "SGD": "S$",
+    "INR": "₹",
+}
+
+
+def get_currency_symbol(currency_code: str | None) -> str:
+    """Resolves standard currency codes to their local symbols, default to $."""
+    if not currency_code:
+        return "$"
+    return CURRENCY_SYMBOLS.get(currency_code.upper(), "$")
+
 
 def format_price_data_for_table(
     data: list[dict], old_prices: dict, alias_map: dict[str, str]
@@ -45,10 +66,14 @@ def format_price_data_for_table(
             elif round(price, 2) < round(old_price, 2):
                 change_direction = "down"
 
+        # Dynamically fetch the currency symbol
+        currency = item.get("currency", "USD")
+        sym = get_currency_symbol(currency)
+
         day_low = item.get("day_low")
         day_high = item.get("day_high")
         day_range_str = (
-            f"${day_low:,.2f} - ${day_high:,.2f}"
+            f"{sym}{day_low:,.2f} - {sym}{day_high:,.2f}"
             if day_low is not None and day_high is not None
             else "N/A"
         )
@@ -56,7 +81,7 @@ def format_price_data_for_table(
         fifty_two_week_low = item.get("fifty_two_week_low")
         fifty_two_week_high = item.get("fifty_two_week_high")
         fifty_two_week_range_str = (
-            f"${fifty_two_week_low:,.2f} - ${fifty_two_week_high:,.2f}"
+            f"{sym}{fifty_two_week_low:,.2f} - {sym}{fifty_two_week_high:,.2f}"
             if fifty_two_week_low is not None and fifty_two_week_high is not None
             else "N/A"
         )
@@ -65,10 +90,10 @@ def format_price_data_for_table(
         volume_str = f"{volume:,}" if volume is not None else "N/A"
 
         open_price = item.get("open")
-        open_str = f"${open_price:,.2f}" if open_price is not None else "N/A"
+        open_str = f"{sym}{open_price:,.2f}" if open_price is not None else "N/A"
 
         prev_close_str = (
-            f"${previous_close:,.2f}" if previous_close is not None else "N/A"
+            f"{sym}{previous_close:,.2f}" if previous_close is not None else "N/A"
         )
 
         all_time_high = item.get("all_time_high")
@@ -106,6 +131,8 @@ def format_price_data_for_table(
                 "_raw_price": price,  # For sorting if needed, though Price is used for display
                 "_raw_change": change,
                 "_raw_change_percent": change_percent,
+                "_currency": currency,
+                "_currency_symbol": sym,
             }
         )
     return rows
@@ -144,13 +171,17 @@ def format_historical_data_as_table(data):
     table.add_column("Close", key="Close")
     table.add_column("Volume", key="Volume")
 
+    # Resolve currency code from metadata
+    currency_code = data.attrs.get("currency", "USD") if hasattr(data, "attrs") else "USD"
+    sym = get_currency_symbol(currency_code)
+
     for index, row in data.iterrows():
         table.add_row(
             index.strftime(date_format),
-            f"${row['Open']:,.2f}",
-            f"${row['High']:,.2f}",
-            f"${row['Low']:,.2f}",
-            f"${row['Close']:,.2f}",
+            f"{sym}{row['Open']:,.2f}",
+            f"{sym}{row['High']:,.2f}",
+            f"{sym}{row['Low']:,.2f}",
+            f"{sym}{row['Close']:,.2f}",
             f"{row['Volume']:,}",
         )
     return table
