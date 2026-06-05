@@ -247,3 +247,48 @@ class TestMarketProvider(unittest.TestCase):
             status["is_open"], f"Exchange {exchange} resulted in is_open=True"
         )
         self.assertEqual(status["status"], "closed", "Should be closed at 2:00 AM")
+
+    @patch("stockstui.data_providers.market_provider.yf.Tickers")
+    def test_fast_data_does_not_overwrite_with_none(self, mock_yf_tickers):
+        """Test that fast data updates do not overwrite valid cached data with None values."""
+        # 1. Populate the cache with valid slow data
+        market_provider._price_cache["AAPL"] = {
+            "expiry": datetime.now(timezone.utc) + timedelta(hours=1),
+            "data": {
+                "symbol": "AAPL",
+                "price": 150.0,
+                "day_low": 145.0,
+                "day_high": 155.0,
+                "volume": 1000000,
+                "open": 148.0,
+                "market_cap": 2000000000000,
+                "currency": "USD"
+            }
+        }
+
+        # 2. Setup mock fast_info return containing some None values (e.g. day_low is None)
+        mock_ticker = MagicMock()
+        mock_ticker.fast_info = {
+            "lastPrice": 152.0,
+            "dayLow": None,
+            "dayHigh": 156.0,
+            "lastVolume": None,
+            "open": 149.0,
+            "marketCap": 2010000000000,
+            "currency": "USD"
+        }
+        mock_yf_tickers.return_value.tickers = {"AAPL": mock_ticker}
+
+        # 3. Trigger _fetch_fast_data through get_market_price_data when market is open
+        with patch("stockstui.data_providers.market_provider.get_market_status") as mock_status:
+            mock_status.return_value = {"is_open": True}
+
+            market_provider._info_cache["AAPL"] = {"exchange": "NYSE"}
+            market_provider.get_market_price_data(["AAPL"])
+
+            # Verify the price was updated, but day_low and volume were NOT overwritten with None
+            aapl_data = market_provider._price_cache["AAPL"]["data"]
+            self.assertEqual(aapl_data["price"], 152.0)
+            self.assertEqual(aapl_data["day_low"], 145.0)
+            self.assertEqual(aapl_data["volume"], 1000000)
+            self.assertEqual(aapl_data["day_high"], 156.0)
