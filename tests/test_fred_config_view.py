@@ -1,7 +1,7 @@
 import unittest
-from unittest.mock import MagicMock
 from textual.app import App
-from textual.widgets import DataTable, Input, Button
+from textual.widgets import DataTable, Input, Button, Switch
+from unittest.mock import MagicMock, AsyncMock, patch
 
 from stockstui.ui.views.config_views.fred_config_view import FredConfigView
 from stockstui.ui.modals import AddFredSeriesModal
@@ -13,7 +13,9 @@ class FredConfigTestApp(App):
     def __init__(self):
         super().__init__()
         self.config = MagicMock()
+        self.config.get_setting.return_value = []
         self.config.settings = {
+            "hidden_tabs": [],
             "fred_settings": {
                 "api_key": "fake_key",
                 "series_list": ["TEST1", "TEST2"],
@@ -23,12 +25,20 @@ class FredConfigTestApp(App):
         }
         self.theme_variables = {"text-muted": "dim"}
         self.notify = MagicMock()
+        self._rebuild_app = AsyncMock()
 
     def compose(self):
         yield FredConfigView()
 
 
 class TestFredConfigView(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        self.patcher = patch("stockstui.ui.views.config_views.fred_config_view.FredConfigView._fetch_descriptions")
+        self.mock_fetch = self.patcher.start()
+
+    async def asyncTearDown(self):
+        self.patcher.stop()
+
     async def test_initial_population(self):
         """Test table populates on mount."""
         app = FredConfigTestApp()
@@ -70,7 +80,7 @@ class TestFredConfigView(unittest.IsolatedAsyncioTestCase):
             table.focus()
             table.cursor_coordinate = (0, 0)
 
-            await pilot.click("#remove-fred-series")
+            app.query_one("#remove-fred-series", Button).press()
             await pilot.pause()
 
             # Verify removed from settings
@@ -92,7 +102,7 @@ class TestFredConfigView(unittest.IsolatedAsyncioTestCase):
             table.focus()
             table.cursor_coordinate = (0, 0)
 
-            await pilot.click("#move-fred-series-down")
+            app.query_one("#move-fred-series-down", Button).press()
             await pilot.pause()
 
             # New list should be [TEST2, TEST1]
@@ -107,7 +117,7 @@ class TestFredConfigView(unittest.IsolatedAsyncioTestCase):
         app.push_screen = MagicMock()
 
         async with app.run_test(size=(120, 40)) as pilot:
-            await pilot.click("#add-fred-series")
+            app.query_one("#add-fred-series", Button).press()
             await pilot.pause()
 
             # Verify push_screen called with AddFredSeriesModal
@@ -125,3 +135,25 @@ class TestFredConfigView(unittest.IsolatedAsyncioTestCase):
             settings = app.config.settings["fred_settings"]
             self.assertIn("NEW_SERIES", settings["series_list"])
             self.assertEqual(settings["series_aliases"]["NEW_SERIES"], "New Alias")
+
+    async def test_toggle_fred_visibility(self):
+        """Test toggling FRED tab visibility."""
+        app = FredConfigTestApp()
+        async with app.run_test(size=(120, 40)) as pilot:
+            switch = app.query_one("#fred-visibility-switch", Switch)
+            self.assertTrue(switch.value)
+
+            # Programmatically change switch to False
+            switch.value = False
+            await pilot.pause()
+
+            # Verify hidden_tabs updated to include 'fred'
+            self.assertIn("fred", app.config.settings["hidden_tabs"])
+            app._rebuild_app.assert_called_once_with("configs", config_sub_view="fred")
+
+            # Toggle back to True
+            switch.value = True
+            await pilot.pause()
+
+            # Verify 'fred' removed from hidden_tabs
+            self.assertNotIn("fred", app.config.settings["hidden_tabs"])
