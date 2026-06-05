@@ -4,6 +4,7 @@ import copy
 import json
 import logging
 import time
+import re
 from typing import Union, Any
 import shutil
 import subprocess
@@ -245,6 +246,7 @@ class StocksTUI(App):
         self._original_status_text: Any = None
         self._last_active_category: str | None = None
         self._last_config_sub_view: str | None = None
+        self._is_rebuilding = False
         self._force_config_sub_view: str | None = (
             None  # Used to temporarily force a config view after operations
         )
@@ -337,9 +339,7 @@ class StocksTUI(App):
             [(t, t) for t in self._available_theme_names]
         )
         general_view.query_one("#theme-select", Select).value = active_theme
-        general_view.query_one(
-            "#auto-refresh-switch", Switch
-        ).value = self.config.get_setting("auto_refresh", False)
+
         general_view.query_one("#refresh-interval-input", Input).value = str(
             self.config.get_setting("refresh_interval", 300.0)
         )
@@ -672,6 +672,29 @@ class StocksTUI(App):
         self.tab_map = []
         hidden_tabs = set(self.config.get_setting("hidden_tabs", []))
 
+        # CLI Override: auto-enable tab if specified on command line
+        start_category = None
+        if self.cli_overrides:
+            if cli_tab := self.cli_overrides.get("tab"):
+                start_category = cli_tab
+            elif self.cli_overrides.get("history"):
+                start_category = "history"
+            elif self.cli_overrides.get("news"):
+                start_category = "news"
+            elif self.cli_overrides.get("options"):
+                start_category = "options"
+            elif self.cli_overrides.get("fred"):
+                start_category = "fred"
+            elif self.cli_overrides.get("debug"):
+                start_category = "debug"
+            elif self.cli_overrides.get("configs"):
+                start_category = "configs"
+            elif session_lists := self.cli_overrides.get("session_list"):
+                start_category = next(iter(session_lists))
+
+        if start_category and start_category in hidden_tabs:
+            hidden_tabs.discard(start_category)
+
         all_list_categories = list(self.config.lists.keys())
         # Use dict.fromkeys to remove duplicates while preserving order
         all_possible_categories = list(
@@ -699,90 +722,96 @@ class StocksTUI(App):
         """
         Rebuilds dynamic parts of the UI, primarily the tabs and config screen widgets.
         """
-        self._setup_dynamic_tabs()
-        tabs_widget = self.query_one(Tabs)
-        current_active_cat = new_active_category or self.get_active_category()
-
-        await tabs_widget.clear()
-
-        for i, tab_data in enumerate(self.tab_map, start=1):
-            tab_id = f"tab-{i}"
-            # Safety check: ensure no residual widget exists with this ID
-            if tabs_widget.query(f"#{tab_id}"):
-                await tabs_widget.query(f"#{tab_id}").remove()
-            await tabs_widget.add_tab(Tab(f"{i}: {tab_data['name']}", id=tab_id))
-        self._update_tab_bindings()
-
+        if getattr(self, "_is_rebuilding", False):
+            return
+        self._is_rebuilding = True
         try:
-            idx_to_activate = next(
-                i
-                for i, t in enumerate(self.tab_map, start=1)
-                if t["category"] == current_active_cat
-            )
-        except (StopIteration, NoMatches):
-            default_cat = self.config.get_setting("default_tab_category", "all")
+            self._setup_dynamic_tabs()
+            tabs_widget = self.query_one(Tabs)
+            current_active_cat = new_active_category or self.get_active_category()
+
+            await tabs_widget.clear()
+
+            for i, tab_data in enumerate(self.tab_map, start=1):
+                tab_id = f"tab-{i}"
+                # Safety check: ensure no residual widget exists with this ID
+                if tabs_widget.query(f"#{tab_id}"):
+                    await tabs_widget.query(f"#{tab_id}").remove()
+                await tabs_widget.add_tab(Tab(f"{i}: {tab_data['name']}", id=tab_id))
+            self._update_tab_bindings()
+
             try:
                 idx_to_activate = next(
                     i
                     for i, t in enumerate(self.tab_map, start=1)
-                    if t["category"] == default_cat
+                    if t["category"] == current_active_cat
                 )
             except (StopIteration, NoMatches):
-                idx_to_activate = 1
+                default_cat = self.config.get_setting("default_tab_category", "all")
+                try:
+                    idx_to_activate = next(
+                        i
+                        for i, t in enumerate(self.tab_map, start=1)
+                        if t["category"] == default_cat
+                    )
+                except (StopIteration, NoMatches):
+                    idx_to_activate = 1
 
-        if tabs_widget.tab_count >= idx_to_activate:
-            tabs_widget.active = f"tab-{idx_to_activate}"
+            if tabs_widget.tab_count >= idx_to_activate:
+                tabs_widget.active = f"tab-{idx_to_activate}"
 
-        if current_active_cat == "configs" and config_sub_view:
-            config_container = self.query_one(ConfigContainer)
-            view_map = {
-                "lists": config_container.show_lists,
-                "general": config_container.show_general,
-                "portfolios": config_container.show_portfolios,
-            }
-            show_method = view_map.get(config_sub_view)
-            if show_method:
-                show_method()
-            # Temporarily force this config sub-view after the operation
-            self._force_config_sub_view = config_sub_view
-        elif current_active_cat == "configs":
-            # If we're going to configs but no sub-view was specified, try to restore the last one
-            config_container = self.query_one(ConfigContainer)
-            if self._last_config_sub_view:
+            if current_active_cat == "configs" and config_sub_view:
+                config_container = self.query_one(ConfigContainer)
                 view_map = {
                     "lists": config_container.show_lists,
                     "general": config_container.show_general,
                     "portfolios": config_container.show_portfolios,
                 }
-                show_method = view_map.get(self._last_config_sub_view)
+                show_method = view_map.get(config_sub_view)
                 if show_method:
                     show_method()
+                # Temporarily force this config sub-view after the operation
+                self._force_config_sub_view = config_sub_view
+            elif current_active_cat == "configs":
+                # If we're going to configs but no sub-view was specified, try to restore the last one
+                config_container = self.query_one(ConfigContainer)
+                if self._last_config_sub_view:
+                    view_map = {
+                        "lists": config_container.show_lists,
+                        "general": config_container.show_general,
+                        "portfolios": config_container.show_portfolios,
+                    }
+                    show_method = view_map.get(self._last_config_sub_view)
+                    if show_method:
+                        show_method()
 
-        config_container = self.query_one(ConfigContainer)
-        general_view = config_container.query_one(GeneralConfigView)
-        default_tab_select = general_view.query_one("#default-tab-select", Select)
-        options = [
-            (t["name"], t["category"])
-            for t in self.tab_map
-            if t["category"] not in ["configs", "history", "news", "debug"]
-        ]
-        default_tab_select.set_options(options)
+            config_container = self.query_one(ConfigContainer)
+            general_view = config_container.query_one(GeneralConfigView)
+            default_tab_select = general_view.query_one("#default-tab-select", Select)
+            options = [
+                (t["name"], t["category"])
+                for t in self.tab_map
+                if t["category"] not in ["configs", "history", "news", "debug"]
+            ]
+            default_tab_select.set_options(options)
 
-        default_cat_value = self.config.get_setting("default_tab_category", "all")
+            default_cat_value = self.config.get_setting("default_tab_category", "all")
 
-        valid_option_values = [opt[1] for opt in options]
+            valid_option_values = [opt[1] for opt in options]
 
-        if default_cat_value in valid_option_values:
-            default_tab_select.value = default_cat_value
-        elif options:
-            default_tab_select.value = options[0][1]
-        else:
-            default_tab_select.clear()
+            if default_cat_value in valid_option_values:
+                default_tab_select.value = default_cat_value
+            elif options:
+                default_tab_select.value = options[0][1]
+            else:
+                default_tab_select.clear()
 
-        # Refresh visible tabs list
-        general_view.repopulate_visible_tabs()
+            # Refresh visible tabs list
+            general_view.repopulate_visible_tabs()
 
-        self.query_one(ListsConfigView).repopulate_lists()
+            self.query_one(ListsConfigView).repopulate_lists()
+        finally:
+            self._is_rebuilding = False
 
     def get_active_category(self) -> str | None:
         """Returns the category string of the currently active tab."""
@@ -1425,6 +1454,9 @@ class StocksTUI(App):
 
             row_values = []
             change_direction = item.get("_change_direction")
+            # Dynamically resolve currency symbol per ticker (e.g. €, £, ¥)
+            # instead of hardcoding "$" for all rows.
+            cur_sym = item.get("_currency_symbol", "$")
 
             for col_key in visible_columns:
                 val = item.get(col_key)
@@ -1439,7 +1471,7 @@ class StocksTUI(App):
                 elif col_key == "Price":
                     raw_price = val
                     text = (
-                        Text(f"${raw_price:,.2f}", style=price_color, justify="right")
+                        Text(f"{cur_sym}{raw_price:,.2f}", style=price_color, justify="right")
                         if raw_price is not None
                         else Text("N/A", style=muted_color, justify="right")
                     )
@@ -1468,7 +1500,7 @@ class StocksTUI(App):
                 elif col_key == "All Time High":
                     raw_ath = val
                     text = (
-                        Text(f"${raw_ath:,.2f}", style=price_color, justify="right")
+                        Text(f"{cur_sym}{raw_ath:,.2f}", style=price_color, justify="right")
                         if raw_ath is not None
                         else Text("N/A", style=muted_color, justify="right")
                     )
@@ -1953,9 +1985,9 @@ class StocksTUI(App):
                     return (1, 0)
                 if self._sort_column_key in ("Description", "Ticker"):
                     return (0, text_content.lower())
+                cleaned_text = re.sub(r"^[^\d\.\-]+", "", text_content)
                 cleaned_text = (
-                    text_content.replace("$", "")
-                    .replace(",", "")
+                    cleaned_text.replace(",", "")
                     .replace("%", "")
                     .replace("+", "")
                 )
@@ -1993,7 +2025,7 @@ class StocksTUI(App):
                         return (0, text_content)
                     except (ValueError, TypeError):
                         return (1, "")
-                cleaned_text = text_content.replace("$", "").replace(",", "")
+                cleaned_text = re.sub(r"^[^\d\.\-]+", "", text_content).replace(",", "")
                 try:
                     return (0, float(cleaned_text))
                 except (ValueError, TypeError):
@@ -2696,7 +2728,7 @@ def run_cli_output(args: argparse.Namespace):
         for ticker in ordered_tickers:
             info = all_info.get(ticker)
             if not info or not info.get("currency"):
-                rows.append(("Invalid Ticker", None, None, None, "N/A", "N/A", ticker))
+                rows.append(("Invalid Ticker", None, None, None, "N/A", "N/A", ticker, "$"))
                 continue
 
             price = (
@@ -2719,13 +2751,18 @@ def run_cli_output(args: argparse.Namespace):
                 if change is not None and prev_close != 0
                 else None
             )
+
+            # Resolve currency symbol
+            currency_code = info.get("currency", "USD")
+            sym = formatter.get_currency_symbol(currency_code)
+
             day_range = (
-                f"${info.get('regularMarketDayLow'):,.2f} - ${info.get('regularMarketDayHigh'):,.2f}"
+                f"{sym}{info.get('regularMarketDayLow'):,.2f} - {sym}{info.get('regularMarketDayHigh'):,.2f}"
                 if info.get("regularMarketDayLow") and info.get("regularMarketDayHigh")
                 else "N/A"
             )
             wk_range = (
-                f"${info.get('fiftyTwoWeekLow'):,.2f} - ${info.get('fiftyTwoWeekHigh'):,.2f}"
+                f"{sym}{info.get('fiftyTwoWeekLow'):,.2f} - {sym}{info.get('fiftyTwoWeekHigh'):,.2f}"
                 if info.get("fiftyTwoWeekLow") and info.get("fiftyTwoWeekHigh")
                 else "N/A"
             )
@@ -2739,6 +2776,7 @@ def run_cli_output(args: argparse.Namespace):
                     day_range,
                     wk_range,
                     ticker,
+                    sym,
                 )
             )
 
@@ -2753,8 +2791,8 @@ def run_cli_output(args: argparse.Namespace):
         table.add_column("52-Wk Range", justify="right")
         table.add_column("Ticker", style="dim")
 
-        for desc, price, change, pct, day_r, wk_r, symbol in rows:
-            price_text = f"${price:,.2f}" if price is not None else "N/A"
+        for desc, price, change, pct, day_r, wk_r, symbol, sym in rows:
+            price_text = f"{sym}{price:,.2f}" if price is not None else "N/A"
             style, change_text, pct_text = ("dim", "N/A", "N/A")
             if change is not None and pct is not None:
                 if change > 0:
