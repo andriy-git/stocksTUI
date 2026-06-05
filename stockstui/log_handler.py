@@ -24,6 +24,10 @@ class TextualHandler(logging.Handler):
         Processes a log record and displays it as a notification in the Textual app.
         This method is thread-safe.
         """
+        # Check if TUI logs are suppressed in config
+        if self.app.config.get_setting("suppress_tui_logs", False):
+            return
+
         try:
             # Format the message using the handler's formatter
             message = self.format(record)
