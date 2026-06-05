@@ -11,6 +11,7 @@ class OIChart(PlotextPlot):
         puts_df: pd.DataFrame,
         underlying_price: float,
         ticker: str = "",
+        currency_symbol: str = "$",
         *args,
         **kwargs,
     ):
@@ -26,6 +27,7 @@ class OIChart(PlotextPlot):
         self._puts_df = puts_df
         self._underlying_price = underlying_price
         self._ticker = ticker
+        self._currency_symbol = currency_symbol
 
     def on_mount(self) -> None:
         """Draws the plot when the widget is mounted."""
@@ -165,7 +167,7 @@ class OIChart(PlotextPlot):
         )
 
         plt.title(
-            f"Open Interest by Strike for {self._ticker} (Near ${self._underlying_price:.2f})"
+            f"Open Interest by Strike for {self._ticker} (Near {self._currency_symbol}{self._underlying_price:.2f})"
         )
         plt.xlabel("Strike Price")
         plt.ylabel("Open Interest")
