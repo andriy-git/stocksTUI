@@ -97,6 +97,7 @@ class TestDbManager(unittest.TestCase):
             "INSERT OR REPLACE INTO price_cache (ticker, data, timestamp) VALUES (?, ?, ?)",
             ("NEW", json.dumps({}), not_so_old_ts),
         )
+        self.dbm.conn.commit()
 
         # Pruning happens at initialization, so we create a new instance
         new_dbm = DbManager(self.db_path)
@@ -118,11 +119,13 @@ class TestDbManager(unittest.TestCase):
                 "exchange": "NMS",
                 "shortName": "Tesla",
                 "longName": "Tesla, Inc.",
+                "currency": "USD",
             },
             "NVDA": {
                 "exchange": "NMS",
                 "shortName": "NVIDIA",
                 "longName": "NVIDIA Corporation",
+                "currency": None,
             },
         }
 
