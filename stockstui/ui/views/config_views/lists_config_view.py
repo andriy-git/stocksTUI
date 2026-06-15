@@ -116,6 +116,7 @@ class ListsConfigView(Vertical):
                         and item.name == self.app.active_list_category
                     )
                 except StopIteration:
+                    logging.debug(f"Active category '{self.app.active_list_category}' not found in ListView")
                     new_index = None
 
             # If no index is set (either because active_list_category was None or not found), default to 0.
@@ -133,7 +134,7 @@ class ListsConfigView(Vertical):
             self._update_list_highlight()
             self._populate_ticker_table()
         except NoMatches:
-            pass
+            logging.debug("ListView not found during tab change")
 
     def _update_list_highlight(self) -> None:
         """Applies a specific CSS class to the currently active list item in the ListView."""
@@ -146,7 +147,7 @@ class ListsConfigView(Vertical):
                     if item.name == active_category:
                         item.add_class("active-list-item")
         except NoMatches:
-            pass
+            logging.debug("ListView not found for highlight update")
 
     def _populate_ticker_table(self):
         """
@@ -481,7 +482,7 @@ class ListsConfigView(Vertical):
                     else:
                         item.remove_class("active-column-item")
         except NoMatches:
-            pass
+            logging.debug("Columns ListView not found for highlight update")
 
     @on(ListView.Highlighted)
     def on_column_highlighted(self, event: ListView.Highlighted):
