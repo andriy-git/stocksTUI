@@ -31,12 +31,13 @@ class TestMarketProviderCoverage(unittest.TestCase):
         self.assertEqual(market_provider.get_cached_price("AAPL"), "foo")
         self.assertIsNone(market_provider.get_cached_price("GOOG"))
 
-    @patch("stockstui.data_providers.market_provider.yf.Tickers")
-    def test_get_market_price_data_uncached(self, mock_tickers):
+    @patch("stockstui.data_providers.market_provider.yf.download")
+    @patch("stockstui.data_providers.market_provider.yf.Ticker")
+    def test_get_market_price_data_uncached(self, mock_ticker, mock_download):
         """Test fetching data for uncached tickers."""
         # Setup mocks
         mock_ticker_obj = MagicMock()
-        mock_tickers.return_value.tickers = {"AAPL": mock_ticker_obj}
+        mock_ticker.return_value = mock_ticker_obj
 
         # Mock slow info
         mock_ticker_obj.info = {
@@ -46,8 +47,22 @@ class TestMarketProviderCoverage(unittest.TestCase):
             "longName": "Apple Inc.",
             "currentPrice": 150.0,
         }
-        # Mock fast info
+        # Mock fast info (though not used by download directly, it's used in slow fetch)
         mock_ticker_obj.fast_info = {"lastPrice": 150.0}
+
+        # Mock download for fast data
+        mock_df = pd.DataFrame(
+            {
+                ("Close", "AAPL"): [150.0],
+                ("High", "AAPL"): [155.0],
+                ("Low", "AAPL"): [145.0],
+                ("Open", "AAPL"): [148.0],
+                ("Volume", "AAPL"): [1000],
+            },
+            index=[pd.Timestamp.now(tz="UTC")]
+        )
+        mock_df.columns = pd.MultiIndex.from_tuples(mock_df.columns)
+        mock_download.return_value = mock_df
 
         # Mock market status to be open so it fetches fast data
         with patch(
@@ -64,8 +79,9 @@ class TestMarketProviderCoverage(unittest.TestCase):
             # Verify cache was updated
             self.assertTrue(market_provider.is_cached("AAPL"))
 
-    @patch("stockstui.data_providers.market_provider.yf.Tickers")
-    def test_get_market_price_data_cached_fresh(self, mock_tickers):
+    @patch("stockstui.data_providers.market_provider.yf.download")
+    @patch("stockstui.data_providers.market_provider.yf.Ticker")
+    def test_get_market_price_data_cached_fresh(self, mock_ticker, mock_download):
         """Test that fresh cached data prevents new fetches."""
         # Populate cache with fresh data
         future = datetime.datetime.now(timezone.utc) + timedelta(hours=1)
@@ -84,7 +100,8 @@ class TestMarketProviderCoverage(unittest.TestCase):
 
             self.assertEqual(len(data), 1)
             self.assertEqual(data[0]["price"], 100.0)
-            mock_tickers.assert_not_called()
+            mock_ticker.assert_not_called()
+            mock_download.assert_not_called()
 
     @patch("stockstui.data_providers.market_provider.yf.Ticker")
     def test_get_ticker_info(self, mock_ticker):
