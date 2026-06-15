@@ -140,7 +140,7 @@ class ConfigManager:
         temp_path = user_path.with_suffix(user_path.suffix + ".tmp")
         try:
             with open(temp_path, "w") as f:
-                json.dump(data, f, indent=4)
+                json.dump(data, f, indent=2)
             os.replace(temp_path, user_path)
         except IOError as e:
             logging.error(f"Could not save to '{filename}': {e}")
