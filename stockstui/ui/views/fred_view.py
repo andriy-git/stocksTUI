@@ -6,6 +6,8 @@ from textual.binding import Binding
 from textual import work
 from rich.text import Text
 import webbrowser
+import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from stockstui.data_providers import fred_provider
 from stockstui.ui.widgets.navigable_data_table import NavigableDataTable
@@ -82,7 +84,7 @@ class FredView(Vertical):
         try:
             self.query_one("#fred-summary-table").focus()
         except NoMatches:
-            pass
+            logging.debug("FredDataTable not found - view may not be mounted")
 
     def action_edit_series(self):
         """Edit the alias of the selected series."""
@@ -124,7 +126,7 @@ class FredView(Vertical):
                 EditFredSeriesModal(series_id, current_alias), handle_edit
             )
         except NoMatches:
-            pass
+            logging.debug("FredDataTable not found for edit operation")
 
     def action_open_series(self):
         """Open the selected FRED series in the default web browser."""
@@ -152,7 +154,7 @@ class FredView(Vertical):
             except Exception as e:
                 self.app.notify(f"Failed to open browser: {e}", severity="error")
         except NoMatches:
-            pass
+            logging.debug("FredDataTable not found for open operation")
 
     @work(exclusive=True, thread=True)
     def load_all_series(self):
@@ -171,12 +173,23 @@ class FredView(Vertical):
 
         self.app.call_from_thread(self._set_loading, True)
 
-        summaries = []
-        for series_id in series_list:
-            # We fetching sequentially for now to be gentle on limited threads/connections
-            # Could be parallelized if needed
-            s = fred_provider.get_series_summary(series_id, api_key)
-            summaries.append(s)
+        # Fetch FRED series summaries concurrently to avoid O(n * latency) blocking
+        max_workers = min(len(series_list), 4)
+        summaries = [None] * len(series_list)
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_index = {
+                executor.submit(fred_provider.get_series_summary, series_id, api_key): i
+                for i, series_id in enumerate(series_list)
+            }
+            for future in as_completed(future_to_index):
+                idx = future_to_index[future]
+                try:
+                    summaries[idx] = future.result()
+                except Exception as e:
+                    logging.error(f"Failed to fetch FRED series: {e}")
+
+        # Filter out any None values in case of fetch errors
+        summaries = [s for s in summaries if s is not None]
 
         self.app.call_from_thread(self._populate_table, summaries)
 
@@ -184,7 +197,7 @@ class FredView(Vertical):
         try:
             self.query_one("#fred-summary-table", DataTable).loading = loading
         except NoMatches:
-            pass
+            logging.debug("DataTable not found for _set_loading")
 
     def _show_error(self):
         try:
@@ -193,7 +206,7 @@ class FredView(Vertical):
             table.clear()
             table.add_row("Error: API Key missing. Go to Configs > FRED Settings.")
         except NoMatches:
-            pass
+            logging.debug("DataTable not found for _show_error")
 
     def _display_empty(self):
         try:
@@ -204,7 +217,7 @@ class FredView(Vertical):
                 "No series configured. Go to Configs > FRED Settings to add data."
             )
         except NoMatches:
-            pass
+            logging.debug("DataTable not found for _display_empty")
 
     def _populate_table(self, summaries: list):
         try:
@@ -220,6 +233,49 @@ class FredView(Vertical):
 
             settings = self.app.config.settings.get("fred_settings", {})
             aliases = settings.get("series_aliases", {})
+
+            # Helper to format percentage values with color
+            def format_pct(val, show_sign=True):
+                if val is None:
+                    return Text("N/A", justify="right", style=text_muted)
+                color = (
+                    success_color if val > 0 else (error_color if val < 0 else "")
+                )
+                prefix = "+" if val > 0 and show_sign else ""
+                return Text(f"{prefix}{val:.1f}%", style=color, justify="right")
+
+            # Helper to format numeric values
+            def format_num(val, decimals=2):
+                if val is None:
+                    return Text("N/A", justify="right", style=text_muted)
+                return Text(f"{val:,.{decimals}f}", justify="right")
+
+            # Format Z-score with warning colors for extreme values
+            def format_zscore(val):
+                if val is None:
+                    return Text("N/A", justify="right", style=text_muted)
+                # Extreme values (|z| > 2) get warning/error color
+                if abs(val) > 2:
+                    color = error_color
+                elif abs(val) > 1:
+                    color = warning_color
+                else:
+                    color = ""
+                prefix = "+" if val > 0 else ""
+                return Text(f"{prefix}{val:.2f}", style=color, justify="right")
+
+            # Format % range with colors for extreme positions
+            def format_pct_range(val):
+                if val is None:
+                    return Text("N/A", justify="right", style=text_muted)
+                # Near extremes get warning colors
+                if val >= 90:
+                    color = warning_color  # Near max
+                elif val <= 10:
+                    color = warning_color  # Near min
+                else:
+                    color = ""
+                return Text(f"{val:.0f}%", style=color, justify="right")
 
             for item in summaries:
                 series_id = item.get("id")
@@ -239,49 +295,6 @@ class FredView(Vertical):
                     current_text = Text(
                         str(current_val), justify="right", style=text_muted
                     )
-
-                # Helper to format percentage values with color
-                def format_pct(val, show_sign=True):
-                    if val is None:
-                        return Text("N/A", justify="right", style=text_muted)
-                    color = (
-                        success_color if val > 0 else (error_color if val < 0 else "")
-                    )
-                    prefix = "+" if val > 0 and show_sign else ""
-                    return Text(f"{prefix}{val:.1f}%", style=color, justify="right")
-
-                # Helper to format numeric values
-                def format_num(val, decimals=2):
-                    if val is None:
-                        return Text("N/A", justify="right", style=text_muted)
-                    return Text(f"{val:,.{decimals}f}", justify="right")
-
-                # Format Z-score with warning colors for extreme values
-                def format_zscore(val):
-                    if val is None:
-                        return Text("N/A", justify="right", style=text_muted)
-                    # Extreme values (|z| > 2) get warning/error color
-                    if abs(val) > 2:
-                        color = error_color
-                    elif abs(val) > 1:
-                        color = warning_color
-                    else:
-                        color = ""
-                    prefix = "+" if val > 0 else ""
-                    return Text(f"{prefix}{val:.2f}", style=color, justify="right")
-
-                # Format % range with colors for extreme positions
-                def format_pct_range(val):
-                    if val is None:
-                        return Text("N/A", justify="right", style=text_muted)
-                    # Near extremes get warning colors
-                    if val >= 90:
-                        color = warning_color  # Near max
-                    elif val <= 10:
-                        color = warning_color  # Near min
-                    else:
-                        color = ""
-                    return Text(f"{val:.0f}%", style=color, justify="right")
 
                 # Format date
                 date_text = Text(item.get("date", "N/A"), justify="center")
@@ -313,4 +326,4 @@ class FredView(Vertical):
             # NOTE: Do NOT call table.focus() here - it steals focus from Tabs.
 
         except NoMatches:
-            pass
+            logging.debug("DataTable not found for _populate_table")
