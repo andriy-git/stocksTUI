@@ -79,7 +79,7 @@ from stockstui.data_providers import market_provider
 from stockstui.data_providers import options_provider
 from stockstui.presentation import formatter
 from stockstui.utils import extract_cell_text
-from stockstui.utils import parse_tags
+from stockstui.utils import parse_tags, match_tags
 from stockstui.database.db_manager import DbManager
 from stockstui.parser import create_arg_parser
 from stockstui.log_handler import TextualHandler
@@ -254,6 +254,23 @@ class StocksTUI(App):
         self._pre_refresh_cursor_column: int | None = None
         self._is_filter_refresh = False
 
+        # Populate initial caches
+        self._refresh_hidden_tabs()
+        self._rebuild_visible_columns()
+
+        # --- Handle CLI Overrides ---
+        if session_lists := self.cli_overrides.get("session_list"):
+            for name, tickers in session_lists.items():
+                self.config.lists[name] = [
+                    {"ticker": ticker, "alias": ticker, "note": ""}
+                    for ticker in tickers
+                ]
+
+        self._setup_dynamic_tabs()
+
+        # Move theme registration to __init__ to prevent race conditions.
+        self._load_and_register_themes()
+
     def add_option_position(
         self, symbol: str, ticker: str, quantity: float, avg_cost: float
     ):
@@ -277,19 +294,6 @@ class StocksTUI(App):
         self._pre_refresh_cursor_column = None
         self._is_filter_refresh = False
 
-        # --- Handle CLI Overrides ---
-        if session_lists := self.cli_overrides.get("session_list"):
-            for name, tickers in session_lists.items():
-                self.config.lists[name] = [
-                    {"ticker": ticker, "alias": ticker, "note": ""}
-                    for ticker in tickers
-                ]
-
-        self._setup_dynamic_tabs()
-
-        # Move theme registration to __init__ to prevent race conditions.
-        self._load_and_register_themes()
-
     def compose(self) -> ComposeResult:
         """
         Creates the static layout of the application.
@@ -297,7 +301,10 @@ class StocksTUI(App):
         with Vertical(id="app-body"):
             yield Tabs(id="tabs-container")
             with Container(id="app-grid"):
-                yield Container(id="output-container")
+                with ContentSwitcher(id="output-container", initial="price-table-container"):
+                    with Vertical(id="price-table-container"):
+                        yield TagFilterWidget(available_tags=[], id="tag-filter")
+                        yield NavigableDataTable(id="price-table", zebra_stripes=True)
                 yield ConfigContainer(id="config-container")
             with Horizontal(id="status-bar-container"):
                 yield Label("Market Status: Unknown", id="market-status")
@@ -335,19 +342,31 @@ class StocksTUI(App):
 
         config_container = self.query_one(ConfigContainer)
         general_view = config_container.query_one(GeneralConfigView)
-        general_view.query_one("#theme-select", Select).set_options(
-            [(t, t) for t in self._available_theme_names]
-        )
-        general_view.query_one("#theme-select", Select).value = active_theme
 
-        general_view.query_one("#refresh-interval-input", Input).value = str(
-            self.config.get_setting("refresh_interval", 300.0)
-        )
-        general_view.query_one(
-            "#market-calendar-select", Select
-        ).value = self.config.get_setting("market_calendar", "NYSE")
+        # Guard updates with _loading to prevent side-effects during startup
+        general_view._loading = True
+        try:
+            general_view.query_one("#theme-select", Select).set_options(
+                [(t, t) for t in self._available_theme_names]
+            )
+            general_view.query_one("#theme-select", Select).value = active_theme
+            general_view.query_one(
+                "#auto-refresh-switch", Switch
+            ).value = self.config.get_setting("auto_refresh", False)
+            general_view.query_one(
+                "#suppress-tui-logs-switch", Switch
+            ).value = self.config.get_setting("suppress_tui_logs", False)
+            general_view.query_one("#refresh-interval-input", Input).value = str(
+                self.config.get_setting("refresh_interval", 300.0)
+            )
+            general_view.query_one(
+                "#market-calendar-select", Select
+            ).value = self.config.get_setting("market_calendar", "NYSE")
+        finally:
+            general_view._loading = False
 
-        start_category = None
+        # Use the user's configured default tab unless overridden by CLI flags below
+        start_category = self.config.get_setting("default_tab_category", "all")
         if self.cli_overrides:
             if cli_tab := self.cli_overrides.get("tab"):
                 start_category = cli_tab
@@ -374,6 +393,16 @@ class StocksTUI(App):
 
         if self.cli_overrides.get("period"):
             self._history_period = self.cli_overrides["period"]
+
+        # Ensure that if a user specified a tab via CLI, it becomes visible
+        if start_category:
+            hidden_tabs = self.config.get_setting("hidden_tabs", [])
+            if start_category in hidden_tabs:
+                hidden_tabs.remove(start_category)
+                self.config.settings["hidden_tabs"] = hidden_tabs
+                self.config.save_settings()
+                self._refresh_hidden_tabs()
+                self.notify(f"Auto-enabled '{start_category}' tab visibility.")
 
         self.call_after_refresh(self._rebuild_app, new_active_category=start_category)
         self.call_after_refresh(self._start_refresh_loops)
@@ -451,7 +480,7 @@ class StocksTUI(App):
             self._original_table_data = []
             return
         except NoMatches:
-            pass
+            logging.debug("SearchBox not found during back action")
 
         # Priority 3: If inside the config container, try to navigate back to the main config view.
         try:
@@ -460,13 +489,13 @@ class StocksTUI(App):
             if config_container.action_go_back():
                 return
         except NoMatches:
-            pass
+            logging.debug("ConfigContainer not found during back action")
 
         # Fallback: If no other context was handled, focus the main tabs.
         try:
             self.query_one(Tabs).focus()
         except NoMatches:
-            pass
+            logging.debug("Tabs not found during back action fallback")
 
     def _restore_status_label(self) -> None:
         """Restores the original status label text."""
@@ -475,7 +504,7 @@ class StocksTUI(App):
             if self._original_status_text is not None:
                 status_label.update(self._original_status_text)
         except NoMatches:
-            pass
+            logging.debug("Status label not found for restoration")
 
     # endregion
 
@@ -495,7 +524,7 @@ class StocksTUI(App):
     def _get_alias_map(self) -> dict[str, str]:
         """Creates a mapping from ticker symbol to its user-defined alias."""
         alias_map = {}
-        hidden_tabs = set(self.config.get_setting("hidden_tabs", []))
+        hidden_tabs = self._hidden_tabs
         for list_name, list_data in self.config.lists.items():
             if list_name not in hidden_tabs:
                 for item in list_data:
@@ -507,20 +536,18 @@ class StocksTUI(App):
 
     def _get_available_tags_for_category(self, category: str) -> list[str]:
         """Gets all available tags from tickers in the specified category."""
-        from stockstui.utils import parse_tags
-
         all_tags = set()
 
         lists_to_check = []
         if category == "all":
             # Only include non-hidden lists when showing 'all' category
-            hidden_tabs = set(self.config.get_setting("hidden_tabs", []))
+            hidden_tabs = self._hidden_tabs
             for list_name, list_data in self.config.lists.items():
                 if list_name not in hidden_tabs:
                     lists_to_check.append(list_data)
         elif category in self.config.lists:
             # If this specific category is hidden, don't include tags from it
-            hidden_tabs = set(self.config.get_setting("hidden_tabs", []))
+            hidden_tabs = self._hidden_tabs
             if category not in hidden_tabs:
                 lists_to_check.append(self.config.lists[category])
 
@@ -537,8 +564,6 @@ class StocksTUI(App):
         """
         Filters symbols by active tag filter, preserving original order and handling duplicates.
         """
-        from stockstui.utils import parse_tags, match_tags
-
         if not self.active_tag_filter:
             return symbols
 
@@ -548,13 +573,13 @@ class StocksTUI(App):
         lists_to_check = []
         if category == "all":
             # Only include non-hidden lists when showing 'all' category
-            hidden_tabs = set(self.config.get_setting("hidden_tabs", []))
+            hidden_tabs = self._hidden_tabs
             for list_name, list_data in self.config.lists.items():
                 if list_name not in hidden_tabs:
                     lists_to_check.append(list_data)
         elif category in self.config.lists:
             # If this specific category is hidden, don't include it in filtering
-            hidden_tabs = set(self.config.get_setting("hidden_tabs", []))
+            hidden_tabs = self._hidden_tabs
             if category not in hidden_tabs:
                 lists_to_check.append(self.config.lists.get(category, []))
 
@@ -586,7 +611,7 @@ class StocksTUI(App):
                 "configs",
             ]:
                 if category == "all":
-                    hidden_tabs = set(self.config.get_setting("hidden_tabs", []))
+                    hidden_tabs = self._hidden_tabs
                     total_symbols = list(
                         set(
                             s["ticker"]
@@ -597,7 +622,7 @@ class StocksTUI(App):
                     )
                 else:
                     # Check if this specific category is hidden
-                    hidden_tabs = set(self.config.get_setting("hidden_tabs", []))
+                    hidden_tabs = self._hidden_tabs
                     if category not in hidden_tabs:
                         total_symbols = [
                             s["ticker"] for s in self.config.lists.get(category, [])
@@ -612,7 +637,7 @@ class StocksTUI(App):
                     len(filtered_symbols), len(total_symbols)
                 )
         except NoMatches:
-            pass
+            logging.debug("TagFilter widget not found during update")
 
     def _load_and_register_themes(self):
         """
@@ -665,35 +690,35 @@ class StocksTUI(App):
                 **theme_dict.get("variables", {}),
             }
 
+    def _refresh_hidden_tabs(self) -> None:
+        """Refreshes the cached set of hidden tabs from config."""
+        self._hidden_tabs = set(self.config.get_setting("hidden_tabs", []))
+
+    def _rebuild_visible_columns(self) -> None:
+        """Reads column settings from config and caches the list of visible column keys."""
+        column_settings = self.config.get_setting("column_settings", [])
+        if not column_settings:
+            column_settings = [
+                {"key": "Ticker", "visible": True},
+                {"key": "Description", "visible": True},
+                {"key": "Price", "visible": True},
+                {"key": "Change", "visible": True},
+                {"key": "% Change", "visible": True},
+                {"key": "Day's Range", "visible": True},
+                {"key": "52-Wk Range", "visible": True},
+                {"key": "All Time High", "visible": True},
+                {"key": "% Off ATH", "visible": True},
+            ]
+        self._visible_columns = [
+            col["key"] for col in column_settings if isinstance(col, dict) and col.get("visible", True)
+        ]
+
     def _setup_dynamic_tabs(self):
         """
         Generates the list of tabs to be displayed based on user configuration.
         """
         self.tab_map = []
-        hidden_tabs = set(self.config.get_setting("hidden_tabs", []))
-
-        # CLI Override: auto-enable tab if specified on command line
-        start_category = None
-        if self.cli_overrides:
-            if cli_tab := self.cli_overrides.get("tab"):
-                start_category = cli_tab
-            elif self.cli_overrides.get("history"):
-                start_category = "history"
-            elif self.cli_overrides.get("news"):
-                start_category = "news"
-            elif self.cli_overrides.get("options"):
-                start_category = "options"
-            elif self.cli_overrides.get("fred"):
-                start_category = "fred"
-            elif self.cli_overrides.get("debug"):
-                start_category = "debug"
-            elif self.cli_overrides.get("configs"):
-                start_category = "configs"
-            elif session_lists := self.cli_overrides.get("session_list"):
-                start_category = next(iter(session_lists))
-
-        if start_category and start_category in hidden_tabs:
-            hidden_tabs.discard(start_category)
+        hidden_tabs = self._hidden_tabs
 
         all_list_categories = list(self.config.lists.keys())
         # Use dict.fromkeys to remove duplicates while preserving order
@@ -722,71 +747,70 @@ class StocksTUI(App):
         """
         Rebuilds dynamic parts of the UI, primarily the tabs and config screen widgets.
         """
-        if getattr(self, "_is_rebuilding", False):
-            return
+        self._refresh_hidden_tabs()
+        self._rebuild_visible_columns()
+        self._setup_dynamic_tabs()
+        tabs_widget = self.query_one(Tabs)
+        current_active_cat = new_active_category or self.get_active_category()
+        self._last_active_category = None
+
+        await tabs_widget.clear()
+        # Suppress on_tabs_tab_activated while adding tabs to prevent
+        # the first tab from auto-activating and triggering a data fetch.
         self._is_rebuilding = True
+        for i, tab_data in enumerate(self.tab_map, start=1):
+            tab_id = f"tab-{i}"
+            # Safety check: ensure no residual widget exists with this ID
+            if tabs_widget.query(f"#{tab_id}"):
+                await tabs_widget.query(f"#{tab_id}").remove()
+            await tabs_widget.add_tab(Tab(f"{i}: {tab_data['name']}", id=tab_id))
+        self._update_tab_bindings()
+
         try:
-            self._setup_dynamic_tabs()
-            tabs_widget = self.query_one(Tabs)
-            current_active_cat = new_active_category or self.get_active_category()
-
-            await tabs_widget.clear()
-
-            for i, tab_data in enumerate(self.tab_map, start=1):
-                tab_id = f"tab-{i}"
-                # Safety check: ensure no residual widget exists with this ID
-                if tabs_widget.query(f"#{tab_id}"):
-                    await tabs_widget.query(f"#{tab_id}").remove()
-                await tabs_widget.add_tab(Tab(f"{i}: {tab_data['name']}", id=tab_id))
-            self._update_tab_bindings()
-
+            idx_to_activate = next(
+                i
+                for i, t in enumerate(self.tab_map, start=1)
+                if t["category"] == current_active_cat
+            )
+        except (StopIteration, NoMatches):
+            default_cat = self.config.get_setting("default_tab_category", "all")
             try:
                 idx_to_activate = next(
                     i
                     for i, t in enumerate(self.tab_map, start=1)
-                    if t["category"] == current_active_cat
+                    if t["category"] == default_cat
                 )
             except (StopIteration, NoMatches):
-                default_cat = self.config.get_setting("default_tab_category", "all")
-                try:
-                    idx_to_activate = next(
-                        i
-                        for i, t in enumerate(self.tab_map, start=1)
-                        if t["category"] == default_cat
-                    )
-                except (StopIteration, NoMatches):
-                    idx_to_activate = 1
+                idx_to_activate = 1
 
-            if tabs_widget.tab_count >= idx_to_activate:
-                tabs_widget.active = f"tab-{idx_to_activate}"
+        # Re-enable tab activation handler before setting the correct tab,
+        # so the handler fires for the desired tab and triggers the right fetch.
+        self._is_rebuilding = False
 
-            if current_active_cat == "configs" and config_sub_view:
-                config_container = self.query_one(ConfigContainer)
-                view_map = {
-                    "lists": config_container.show_lists,
-                    "general": config_container.show_general,
-                    "portfolios": config_container.show_portfolios,
-                }
-                show_method = view_map.get(config_sub_view)
-                if show_method:
-                    show_method()
-                # Temporarily force this config sub-view after the operation
-                self._force_config_sub_view = config_sub_view
-            elif current_active_cat == "configs":
-                # If we're going to configs but no sub-view was specified, try to restore the last one
-                config_container = self.query_one(ConfigContainer)
-                if self._last_config_sub_view:
-                    view_map = {
-                        "lists": config_container.show_lists,
-                        "general": config_container.show_general,
-                        "portfolios": config_container.show_portfolios,
-                    }
-                    show_method = view_map.get(self._last_config_sub_view)
-                    if show_method:
-                        show_method()
+        if tabs_widget.tab_count >= idx_to_activate:
+            tabs_widget.active = f"tab-{idx_to_activate}"
 
+        if current_active_cat == "configs" and config_sub_view:
             config_container = self.query_one(ConfigContainer)
-            general_view = config_container.query_one(GeneralConfigView)
+            view_map = {
+                "lists": config_container.show_lists,
+                "general": config_container.show_general,
+                "portfolios": config_container.show_portfolios,
+            }
+            show_method = view_map.get(config_sub_view)
+            if show_method:
+                show_method()
+            # Temporarily force this config sub-view after the operation
+            self._force_config_sub_view = config_sub_view
+
+        # Setup the GeneralConfigView widgets (default tab selector, visible tabs list).
+        # This must happen during every rebuild to keep config UI in sync with tab_map.
+        config_container = self.query_one(ConfigContainer)
+        general_view = config_container.query_one(GeneralConfigView)
+
+        # Guard updates with _loading to prevent side-effects during rebuild
+        general_view._loading = True
+        try:
             default_tab_select = general_view.query_one("#default-tab-select", Select)
             options = [
                 (t["name"], t["category"])
@@ -808,13 +832,26 @@ class StocksTUI(App):
 
             # Refresh visible tabs list
             general_view.repopulate_visible_tabs()
-
-            self.query_one(ListsConfigView).repopulate_lists()
         finally:
-            self._is_rebuilding = False
+            general_view._loading = False
+
+        self.query_one(ListsConfigView).repopulate_lists()
+
+        # Always reset configs to the main landing page after setup, unless
+        # a specific sub-view was explicitly requested above (e.g., after an operation).
+        # This prevents side-effects from widget setup (like Select.Changed) from
+        # leaving the ContentSwitcher on GeneralConfigView.
+        if not (current_active_cat == "configs" and config_sub_view):
+            config_container.show_main()
 
     def get_active_category(self) -> str | None:
-        """Returns the category string of the currently active tab."""
+        """Returns the category string of the currently active tab.
+
+        Uses _last_active_category as a fast-path cache to avoid repeated
+        tab ID string parsing. Falls back to live query only on cold start.
+        """
+        if self._last_active_category is not None:
+            return self._last_active_category
         try:
             active_tab_id = self.query_one(Tabs).active
             if active_tab_id:
@@ -836,7 +873,7 @@ class StocksTUI(App):
             if tab_index <= tabs.tab_count:
                 tabs.active = f"tab-{tab_index}"
         except NoMatches:
-            pass
+            logging.debug("Tabs widget not found for select_tab action")
 
     def action_copy_text(self) -> None:
         """Copies the currently selected text to the system clipboard."""
@@ -919,7 +956,7 @@ class StocksTUI(App):
         ]:
             if category == "all":
                 seen = set()
-                hidden_tabs = set(self.config.get_setting("hidden_tabs", []))
+                hidden_tabs = self._hidden_tabs
                 symbols = []
                 for list_name, lst in self.config.lists.items():
                     if list_name not in hidden_tabs:
@@ -941,7 +978,7 @@ class StocksTUI(App):
                     if force and price_table.row_count == 0:
                         price_table.loading = True
                 except NoMatches:
-                    pass
+                    logging.debug("Price table not found during refresh")
                 self.fetch_prices(symbols, force=force, category=category)
 
     def action_toggle_help(self) -> None:
@@ -1098,9 +1135,8 @@ class StocksTUI(App):
         """
         Renders the main content area based on the selected tab's category.
         """
-        output_container = self.query_one("#output-container")
+        output_container = self.query_one("#output-container", ContentSwitcher)
         config_container: Any = self.query_one("#config-container")
-        await output_container.remove_children()
 
         is_config_tab = category == "configs"
         config_container.display = is_config_tab
@@ -1138,60 +1174,53 @@ class StocksTUI(App):
                     config_container.show_main()
             return
 
-        if category == "history":
-            await output_container.mount(HistoryView())
-        elif category == "news":
-            await output_container.mount(NewsView())
-        elif category == "options":
-            await output_container.mount(OptionsView())
-        elif category == "fred":
-            await output_container.mount(FredView())
-        elif category == "debug":
-            await output_container.mount(DebugView())
+        # Map special categories to their respective view class and switcher id
+        special_views = {
+            "history": ("history-view", HistoryView),
+            "news": ("news-view", NewsView),
+            "options": ("options-view", OptionsView),
+            "fred": ("fred-view", FredView),
+            "debug": ("debug-view", DebugView),
+        }
+
+        if category in special_views:
+            view_id, view_class = special_views[category]
+            try:
+                view = output_container.query_one(f"#{view_id}")
+            except NoMatches:
+                view = view_class(id=view_id)
+                await output_container.mount(view)
+            output_container.current = view_id
         else:
-            if category not in [
-                "history",
-                "news",
-                "options",
-                "fred",
-                "debug",
-                "configs",
-            ]:
-                available_tags = self._get_available_tags_for_category(category)
+            output_container.current = "price-table-container"
+            price_container = output_container.query_one("#price-table-container")
+
+            # 1. Rebuild / repopulate the TagFilterWidget
+            try:
+                old_tag_filter = price_container.query_one("#tag-filter")
+                await old_tag_filter.remove()
+            except NoMatches:
+                pass
+
+            available_tags = self._get_available_tags_for_category(category)
+            if available_tags:
                 tag_filter = TagFilterWidget(
                     available_tags=available_tags, id="tag-filter"
                 )
-                tag_filter.display = False
-                await output_container.mount(tag_filter)
+                tag_filter.display = False  # Hidden by default
+                price_table = price_container.query_one("#price-table")
+                await price_container.mount(tag_filter, before=price_table)
 
-            await output_container.mount(
-                NavigableDataTable(id="price-table", zebra_stripes=True)
-            )
+            # 2. Re-setup the columns on the price-table
+            price_table = price_container.query_one("#price-table", NavigableDataTable)
+            price_table.clear(columns=True)
 
-            price_table = self.query_one("#price-table", NavigableDataTable)
-
-            column_settings = self.config.get_setting("column_settings", [])
-            # Fallback defaults if empty
-            if not column_settings:
-                column_settings = [
-                    {"key": "Ticker", "visible": True},
-                    {"key": "Description", "visible": True},
-                    {"key": "Price", "visible": True},
-                    {"key": "Change", "visible": True},
-                    {"key": "% Change", "visible": True},
-                    {"key": "Day's Range", "visible": True},
-                    {"key": "52-Wk Range", "visible": True},
-                ]
-
-            for col in column_settings:
-                if not isinstance(col, dict):
-                    continue
-                if col.get("visible", True):
-                    price_table.add_column(col["key"], key=col["key"])
+            for col_key in self._visible_columns:
+                price_table.add_column(col_key, key=col_key)
 
             if category == "all":
                 seen = set()
-                hidden_tabs = set(self.config.get_setting("hidden_tabs", []))
+                hidden_tabs = self._hidden_tabs
                 symbols = []
                 for list_name, lst in self.config.lists.items():
                     if list_name not in hidden_tabs:
@@ -1229,6 +1258,7 @@ class StocksTUI(App):
                     self._style_and_populate_price_table(price_table, rows)
                     self._apply_price_table_sort()
                 else:
+                    price_table.clear()
                     price_table.loading = True
                     self.fetch_prices(symbols, force=False, category=category)
             else:
@@ -1427,25 +1457,7 @@ class StocksTUI(App):
         error_color = self.theme_variables.get("error", "red")
         muted_color = self.theme_variables.get("text-muted", "dim")
 
-        column_settings = self.config.get_setting("column_settings", [])
-        if not column_settings:
-            column_settings = [
-                {"key": "Ticker", "visible": True},
-                {"key": "Description", "visible": True},
-                {"key": "Price", "visible": True},
-                {"key": "Change", "visible": True},
-                {"key": "% Change", "visible": True},
-                {"key": "Day's Range", "visible": True},
-                {"key": "52-Wk Range", "visible": True},
-                {"key": "All Time High", "visible": True},
-                {"key": "% Off ATH", "visible": True},
-            ]
-
-        visible_columns = [
-            c["key"]
-            for c in column_settings
-            if isinstance(c, dict) and c.get("visible", True)
-        ]
+        visible_columns = self._visible_columns
 
         for item in rows:
             symbol = item.get("Ticker")
@@ -1572,6 +1584,14 @@ class StocksTUI(App):
         try:
             dt = self.query_one("#price-table", DataTable)
 
+            # GUARD: If the table has no columns yet, _display_data_for_category hasn't
+            # run for this tab. This can happen in a race condition where the price-fetch
+            # worker completes before the UI setup coroutine has finished adding columns.
+            # Bail out to avoid a "More values than columns" ValueError; the data will
+            # be re-displayed on the next refresh or when the tab UI setup completes.
+            if len(dt.columns) == 0:
+                return
+
             self._pre_refresh_cursor_key = None
             self._pre_refresh_cursor_column = None
             if not self._is_filter_refresh and dt.row_count > 0 and dt.cursor_row >= 0:
@@ -1590,7 +1610,7 @@ class StocksTUI(App):
 
             if active_category == "all":
                 seen = set()
-                hidden_tabs = set(self.config.get_setting("hidden_tabs", []))
+                hidden_tabs = self._hidden_tabs
                 symbols_on_screen = []
                 for list_name, lst in self.config.lists.items():
                     if list_name not in hidden_tabs:
@@ -2081,8 +2101,14 @@ class StocksTUI(App):
     @on(Tabs.TabActivated)
     async def on_tabs_tab_activated(self, event: Tabs.TabActivated):
         """Handles tab switching. Resets sort state and displays new content."""
+        # Skip during _rebuild_app to prevent the first-added tab from triggering a fetch
+        if self._is_rebuilding:
+            return
+        old_category = self._last_active_category
+        self._last_active_category = None
         new_category = self.get_active_category()
-        if new_category == self._last_active_category:
+        if new_category == old_category:
+            self._last_active_category = old_category
             return
 
         try:
@@ -2476,7 +2502,7 @@ class StocksTUI(App):
 
             # Check if this is the 'all' category
             if category == "all":
-                hidden_tabs = set(self.config.get_setting("hidden_tabs", []))
+                hidden_tabs = self._hidden_tabs
                 for list_name, list_data in self.config.lists.items():
                     if list_name not in hidden_tabs:
                         for item in list_data:
@@ -2555,7 +2581,7 @@ class StocksTUI(App):
             symbols_on_screen = []
             if active_category == "all":
                 seen = set()
-                hidden_tabs = set(self.config.get_setting("hidden_tabs", []))
+                hidden_tabs = self._hidden_tabs
                 for list_name, lst in self.config.lists.items():
                     if list_name not in hidden_tabs:
                         for s in lst:
