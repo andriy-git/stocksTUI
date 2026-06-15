@@ -50,9 +50,10 @@ class TextualHandler(logging.Handler):
                     severity=severity,
                     timeout=8,
                 )
-            except RuntimeError:
+            except RuntimeError as e:
                 # This can happen if a worker thread tries to log a message
                 # after the app has already shut down. It's safe to ignore.
+                logging.debug(f"TextualHandler RuntimeError (app shutting down?): {e}")
                 pass
         except Exception:
             self.handleError(record)
