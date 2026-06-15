@@ -33,7 +33,7 @@ class DbManager:
         try:
             self.db_path.parent.mkdir(parents=True, exist_ok=True)
             self.conn = sqlite3.connect(
-                self.db_path, isolation_level=None, check_same_thread=False
+                self.db_path, isolation_level="", check_same_thread=False
             )
             self._create_tables()
             self._prune_expired_entries()
@@ -60,6 +60,7 @@ class DbManager:
                     exchange TEXT,
                     short_name TEXT,
                     long_name TEXT,
+                    currency TEXT,
                     timestamp REAL NOT NULL
                 )
             """)
@@ -72,6 +73,12 @@ class DbManager:
                     timestamp REAL NOT NULL
                 )
             """)
+            # Migration guard to add currency column if the table existed but without it.
+            try:
+                cursor.execute("ALTER TABLE ticker_info ADD COLUMN currency TEXT")
+            except sqlite3.OperationalError:
+                # Column already exists or table does not exist
+                pass
             self.conn.commit()
         except sqlite3.Error as e:
             logging.error(f"Failed to create database tables: {e}")
@@ -146,21 +153,27 @@ class DbManager:
         return loaded_data
 
     def load_info_cache_from_db(self) -> dict:
-        """Loads the ticker info cache (exchange, name) from the database."""
+        """Loads the ticker info cache (exchange, name, currency) from the database."""
         if not self.conn:
             return {}
         loaded_data = {}
         try:
             cursor = self.conn.cursor()
+            # Only load items that are still fresh (within 24 hours) to match price cache freshness
+            load_after_ts = (
+                datetime.now(timezone.utc).timestamp() - CACHE_LOAD_DURATION_SECONDS
+            )
             cursor.execute(
-                "SELECT ticker, exchange, short_name, long_name FROM ticker_info"
+                "SELECT ticker, exchange, short_name, long_name, currency FROM ticker_info WHERE timestamp >= ?",
+                (load_after_ts,),
             )
             rows = cursor.fetchall()
-            for ticker, exchange, short_name, long_name in rows:
+            for ticker, exchange, short_name, long_name, currency in rows:
                 loaded_data[ticker] = {
                     "exchange": exchange,
                     "shortName": short_name,
                     "longName": long_name,
+                    "currency": currency,
                 }
         except sqlite3.Error as e:
             logging.error(f"Failed to load info cache from database: {e}")
@@ -215,6 +228,7 @@ class DbManager:
                     data.get("exchange"),
                     data.get("shortName"),
                     data.get("longName"),
+                    data.get("currency"),
                     now_ts,
                 )
             )
@@ -224,7 +238,7 @@ class DbManager:
             cursor = self.conn.cursor()
             cursor.execute("BEGIN TRANSACTION")
             cursor.executemany(
-                "INSERT OR REPLACE INTO ticker_info (ticker, exchange, short_name, long_name, timestamp) VALUES (?, ?, ?, ?, ?)",
+                "INSERT OR REPLACE INTO ticker_info (ticker, exchange, short_name, long_name, currency, timestamp) VALUES (?, ?, ?, ?, ?, ?)",
                 items_to_save,
             )
             self.conn.commit()
@@ -245,6 +259,7 @@ class DbManager:
             return
         try:
             cursor = self.conn.cursor()
+            cursor.execute("BEGIN TRANSACTION")
             timestamp = datetime.now(timezone.utc).timestamp()
             cursor.execute(
                 """
@@ -257,6 +272,8 @@ class DbManager:
             logging.info(f"Saved option position: {symbol}")
         except sqlite3.Error as e:
             logging.error(f"Failed to save option position {symbol}: {e}")
+            if self.conn:
+                self.conn.rollback()
 
     def get_option_position(self, symbol: str) -> dict | None:
         """Retrieves a specific option position."""
@@ -287,11 +304,14 @@ class DbManager:
             return
         try:
             cursor = self.conn.cursor()
+            cursor.execute("BEGIN TRANSACTION")
             cursor.execute("DELETE FROM option_positions WHERE symbol = ?", (symbol,))
             self.conn.commit()
             logging.info(f"Deleted option position: {symbol}")
         except sqlite3.Error as e:
             logging.error(f"Failed to delete option position {symbol}: {e}")
+            if self.conn:
+                self.conn.rollback()
 
     def get_all_option_positions(self) -> dict:
         """Retrieves all option positions, keyed by symbol."""
