@@ -75,5 +75,6 @@ class PositionModal(ModalScreen[tuple[float, float] | None]):
                 qty = float(qty_input.value)
                 cost = float(cost_input.value) if cost_input.value else 0.0
                 self.dismiss((qty, cost))
-            except ValueError:
+            except ValueError as e:
+                logging.debug(f"Invalid numeric input in position modal: {e}")
                 pass
