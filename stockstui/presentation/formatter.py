@@ -175,14 +175,23 @@ def format_historical_data_as_table(data):
     currency_code = data.attrs.get("currency", "USD") if hasattr(data, "attrs") else "USD"
     sym = get_currency_symbol(currency_code)
 
-    for index, row in data.iterrows():
+    # Extract NumPy arrays once to avoid per-row Series boxing overhead of iterrows()
+    opens  = data["Open"].values
+    highs  = data["High"].values
+    lows   = data["Low"].values
+    closes = data["Close"].values
+    vols   = data["Volume"].values
+
+    for idx, open_, high, low, close, vol in zip(
+        data.index, opens, highs, lows, closes, vols
+    ):
         table.add_row(
-            index.strftime(date_format),
-            f"{sym}{row['Open']:,.2f}",
-            f"{sym}{row['High']:,.2f}",
-            f"{sym}{row['Low']:,.2f}",
-            f"{sym}{row['Close']:,.2f}",
-            f"{row['Volume']:,}",
+            idx.strftime(date_format),
+            f"{sym}{open_:,.2f}",
+            f"{sym}{high:,.2f}",
+            f"{sym}{low:,.2f}",
+            f"{sym}{close:,.2f}",
+            f"{int(vol):,}",
         )
     return table
 
@@ -249,13 +258,25 @@ def format_info_comparison(
     if not slow_info:
         return [("Error", "Could not retrieve data.", "Ticker may be invalid.", False)]
 
-    # Find the union of all keys from both dictionaries
-    all_keys = sorted(list(set(fast_info.keys()) | set(slow_info.keys())))
+    # Find the union of all keys from both dictionaries safely.
+    # We use hasattr in case either fast_info or slow_info is not fully dict-like.
+    fast_keys = set(fast_info.keys()) if hasattr(fast_info, "keys") else set()
+    slow_keys = set(slow_info.keys()) if hasattr(slow_info, "keys") else set()
+    all_keys = sorted(list(fast_keys | slow_keys))
 
     rows = []
     for key in all_keys:
-        val_fast = fast_info.get(key, "N/A")
-        val_slow = slow_info.get(key, "N/A")
+        # yfinance's FastInfo object is a lazy-loading dict where calling get(key) might raise a KeyError
+        # or other Exception if the underlying metadata lacks the requested key (e.g. 'currency').
+        try:
+            val_fast = fast_info.get(key, "N/A") if hasattr(fast_info, "get") else "N/A"
+        except Exception:
+            val_fast = "N/A"
+
+        try:
+            val_slow = slow_info.get(key, "N/A") if hasattr(slow_info, "get") else "N/A"
+        except Exception:
+            val_slow = "N/A"
 
         # Flag a mismatch only if both values exist but are different
         is_mismatch = val_fast != "N/A" and val_slow != "N/A" and val_fast != val_slow
