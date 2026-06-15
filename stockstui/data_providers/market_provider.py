@@ -1,5 +1,6 @@
 import yfinance as yf
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 import time
 import pandas as pd
@@ -47,7 +48,8 @@ def _get_calendar(exchange_name: str):
         calendar = mcal.get_calendar(calendar_name)
         _market_calendars[exchange_name] = calendar
         return calendar
-    except Exception:
+    except Exception as e:
+        logging.debug(f"Failed to get calendar for {calendar_name}: {e}")
         return None
 
 
@@ -66,7 +68,8 @@ def _calculate_info_expiry(exchange_name: str) -> datetime:
                 # ASSUMPTION: The 'previous_close' value updates shortly after market open.
                 # We add a 5-minute buffer to ensure the API has refreshed before we re-fetch.
                 return future_opens.iloc[0].to_pydatetime() + timedelta(minutes=5)
-    except Exception:
+    except Exception as e:
+        logging.debug(f"Failed to calculate info expiry for {exchange_name}: {e}")
         pass
     return now + timedelta(hours=1)
 
@@ -105,6 +108,12 @@ def get_market_price_data(
 
     now = datetime.now(timezone.utc)
 
+    # PERF: Batch market-status lookups by exchange.
+    # Previously this called get_market_status() once per ticker, which rebuilt
+    # a Pandas schedule DataFrame each time. Now we call it once per unique
+    # exchange and reuse the result for all tickers on that exchange.
+    _exchange_open_status: dict[str, bool] = {}
+
     slow_data_to_fetch, fast_data_to_fetch = [], []
     for ticker in valid_tickers:
         if (
@@ -116,7 +125,11 @@ def get_market_price_data(
 
         info = _info_cache.get(ticker, {})
         exchange = info.get("exchange", "NYSE")
-        if get_market_status(exchange).get("is_open"):
+        if exchange not in _exchange_open_status:
+            _exchange_open_status[exchange] = bool(
+                get_market_status(exchange).get("is_open")
+            )
+        if _exchange_open_status[exchange]:
             fast_data_to_fetch.append(ticker)
 
     if slow_data_to_fetch:
@@ -143,17 +156,51 @@ def get_market_price_data(
 
 
 def _fetch_and_cache_slow_data(tickers: list[str]):
+    """
+    Fetches full metadata (info + fast_info) for a batch of tickers in parallel.
+
+    PERF: Previously this iterated sequentially, waiting for each HTTP response
+    before starting the next. Now each ticker is fetched in its own thread via
+    ThreadPoolExecutor, cutting wall-clock time from O(n * latency) to roughly
+    O(latency) for typical list sizes.
+
+    Cache writes happen only after all futures complete so the module-level
+    dicts (_price_cache, _info_cache) are never touched from multiple threads.
+
+    PERF: _calculate_info_expiry() is also memoised per exchange within the
+    batch — the calendar schedule DataFrame is built once per exchange rather
+    than once per ticker.
+    """
     if not tickers:
         return
-    # Let yfinance handle its own session management for optimal performance.
-    ticker_objects = yf.Tickers(" ".join(tickers))
-    for ticker in tickers:
-        try:
-            # Although we iterate, yfinance's Tickers object uses threading
-            # internally to fetch data for all tickers in the background efficiently.
-            slow_info = ticker_objects.tickers[ticker].info
-            fast_info = ticker_objects.tickers[ticker].fast_info
 
+    def _fetch_one(ticker: str) -> tuple[str, dict | None, object | None]:
+        """Fetch info for a single ticker. Runs inside the thread pool."""
+        try:
+            tkr = yf.Ticker(ticker)
+            return ticker, tkr.info, tkr.fast_info
+        except Exception:
+            logging.warning(f"Failed to fetch slow data for {ticker}")
+            return ticker, None, None
+
+    # Cap threads to avoid hammering yfinance rate-limits on very large lists.
+    max_workers = min(len(tickers), 8)
+    raw_results: dict[str, tuple[dict | None, object | None]] = {}
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_ticker = {executor.submit(_fetch_one, t): t for t in tickers}
+        for future in as_completed(future_to_ticker):
+            ticker, slow_info, fast_info = future.result()
+            raw_results[ticker] = (slow_info, fast_info)
+
+    # PERF: Cache _calculate_info_expiry() per exchange so the Pandas calendar
+    # schedule query runs once per exchange per batch instead of once per ticker.
+    exchange_expiry_cache: dict[str, datetime] = {}
+
+    # Write to module-level caches sequentially (no concurrent access).
+    # Preserve the original ticker order for predictability.
+    for ticker in tickers:
+        slow_info, fast_info = raw_results.get(ticker, (None, None))
+        try:
             if slow_info and slow_info.get("currency"):
                 exchange = slow_info.get("exchange", "NYSE")
                 _info_cache[ticker] = {
@@ -162,8 +209,10 @@ def _fetch_and_cache_slow_data(tickers: list[str]):
                     "shortName": slow_info.get("shortName"),
                     "longName": slow_info.get("longName"),
                 }
+                if exchange not in exchange_expiry_cache:
+                    exchange_expiry_cache[exchange] = _calculate_info_expiry(exchange)
                 _price_cache[ticker] = {
-                    "expiry": _calculate_info_expiry(exchange),
+                    "expiry": exchange_expiry_cache[exchange],
                     "data": {
                         "symbol": ticker,
                         "currency": fast_info.get("currency", slow_info.get("currency", "USD")),
@@ -195,12 +244,15 @@ def _fetch_and_cache_slow_data(tickers: list[str]):
                     },
                 }
             else:
+                # If slow_info is None, it means _fetch_one caught an exception (fetch failed).
+                # If slow_info is a dict but has no currency, it's an invalid ticker.
+                description = "Data Unavailable" if slow_info is None else "Invalid Ticker"
                 _price_cache[ticker] = {
                     "expiry": datetime.now(timezone.utc) + timedelta(days=1),
-                    "data": {"symbol": ticker, "description": "Invalid Ticker"},
+                    "data": {"symbol": ticker, "description": description},
                 }
         except Exception:
-            logging.warning(f"Failed to fetch slow data for {ticker}")
+            logging.warning(f"Failed to cache slow data for {ticker}")
             _price_cache[ticker] = {
                 "expiry": datetime.now(timezone.utc) + timedelta(days=1),
                 "data": {"symbol": ticker, "description": "Data Unavailable"},
@@ -208,25 +260,75 @@ def _fetch_and_cache_slow_data(tickers: list[str]):
 
 
 def _fetch_fast_data(tickers: list[str]) -> dict:
+    """
+    Fetches live intraday OHLCV data for multiple tickers in a single batch call.
+
+    PERF: Replaces the old approach of creating yf.Tickers() and then accessing
+    .fast_info for each ticker sequentially. yf.download() fires a single
+    batched HTTP request with its own internal threading (threads=True is the
+    default), so all tickers are fetched concurrently inside yfinance itself.
+
+    NOTE: yf.download() returns OHLCV data, not the same field set as fast_info.
+    market_cap and currency are intentionally omitted here — they are already
+    present in the slow cache and do not need refreshing on every live cycle.
+    day_high / day_low are derived as the intraday max/min across all 1-minute
+    bars returned for the current session.
+    """
     if not tickers:
         return {}
-    live_prices = {}
-    ticker_objects = yf.Tickers(" ".join(tickers))
-    for ticker in tickers:
-        try:
-            fast_info = ticker_objects.tickers[ticker].fast_info
-            if fast_info and fast_info.get("lastPrice"):
+
+    live_prices: dict[str, dict] = {}
+    try:
+        # period="1d" with interval="1m" gives today's intraday bars.
+        # auto_adjust=False returns raw (unadjusted) prices, consistent with
+        # what fast_info.lastPrice returns.
+        # multi_level_index=True always returns a MultiIndex (metric, ticker)
+        # even for a single ticker, which keeps the extraction logic uniform.
+        df = yf.download(
+            tickers,
+            period="1d",
+            interval="1m",
+            threads=True,
+            progress=False,
+            auto_adjust=False,
+            multi_level_index=True,
+        )
+
+        if df is None or df.empty:
+            return {}
+
+        for ticker in tickers:
+            try:
+                close_series = df["Close"][ticker].dropna()
+                if close_series.empty:
+                    # Market closed or no intraday data for this ticker today.
+                    continue
+
+                high_series = df["High"][ticker].dropna()
+                low_series = df["Low"][ticker].dropna()
+                open_series = df["Open"][ticker].dropna()
+                vol_series = df["Volume"][ticker].dropna()
+
                 live_prices[ticker] = {
-                    "currency": fast_info.get("currency"),
-                    "price": fast_info.get("lastPrice"),
-                    "day_low": fast_info.get("dayLow"),
-                    "day_high": fast_info.get("dayHigh"),
-                    "volume": fast_info.get("lastVolume"),
-                    "open": fast_info.get("open"),
-                    "market_cap": fast_info.get("marketCap"),
+                    # Last 1-minute close is the most recent trade price.
+                    "price": float(close_series.iloc[-1]),
+                    # Intraday high/low span all bars in the current session.
+                    "day_high": float(high_series.max()) if not high_series.empty else None,
+                    "day_low": float(low_series.min()) if not low_series.empty else None,
+                    # First bar's open is the session open price.
+                    "open": float(open_series.iloc[0]) if not open_series.empty else None,
+                    # Sum of all intraday bar volumes equals total day volume.
+                    "volume": int(vol_series.sum()) if not vol_series.empty else None,
+                    # market_cap and currency omitted intentionally — see docstring.
                 }
-        except Exception:
-            logging.warning(f"Failed to fetch fast data for {ticker}")
+            except (KeyError, IndexError, ValueError, TypeError) as e:
+                logging.warning(
+                    f"Failed to extract fast data for {ticker} from batch download: {e}"
+                )
+
+    except Exception as e:
+        logging.warning(f"Batch fast-data download failed: {e}")
+
     return live_prices
 
 
