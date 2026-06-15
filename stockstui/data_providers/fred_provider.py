@@ -376,23 +376,40 @@ def get_series_summary(series_id: str, api_key: str) -> Dict[str, Any]:
             try:
                 prev_val = float(prev_obs["value"]) if prev_obs["value"] != "." else 0
                 summary["change_1p"] = summary["current"] - prev_val
-            except (ValueError, TypeError):
-                pass
+            except (ValueError, TypeError) as e:
+                logging.debug(f"Could not parse previous value for {series_id}: {e}")
 
-        # Helper to find closest date (looking back)
+        # Pre-parse dates to enable fast binary search using bisect.
+        # We parse the descending obs_list in reverse order to get an ascending list of dates.
+        parsed_dates_asc = []
+        valid_obs_asc = []
+        for obs in reversed(obs_list):
+            try:
+                d = datetime.strptime(obs["date"], "%Y-%m-%d")
+                parsed_dates_asc.append(d)
+                valid_obs_asc.append(obs)
+            except ValueError:
+                continue
+
+        # Helper to find closest date (looking back) using binary search (bisect)
+        # to avoid linear scans and redundant strptime parsing.
         def find_closest_past(target_date):
-            for obs in obs_list:
-                try:
-                    d = datetime.strptime(obs["date"], "%Y-%m-%d")
-                    # allowed slack: within 30 days for 1Y/5Y comparison?
-                    # Actually, for macro data, we usually just want the observation "about 1 year ago"
-                    # Simple approach: minimize absolute difference in days
-                    if (
-                        abs((d - target_date).days) < 45
-                    ):  # Close enough match (monthly data usually)
-                        return obs
-                except ValueError:
-                    continue
+            if not parsed_dates_asc:
+                return None
+            import bisect
+            # bisect_left locates the insertion point to maintain sorted order
+            idx = bisect.bisect_left(parsed_dates_asc, target_date)
+            candidates = []
+            if idx < len(parsed_dates_asc):
+                candidates.append((abs((parsed_dates_asc[idx] - target_date).days), idx))
+            if idx > 0:
+                candidates.append((abs((parsed_dates_asc[idx - 1] - target_date).days), idx - 1))
+            if not candidates:
+                return None
+            # Find candidate with minimal absolute difference in days
+            min_diff, best_idx = min(candidates)
+            if min_diff < 45:
+                return valid_obs_asc[best_idx]
             return None
 
         # 1 Year Ago
@@ -403,8 +420,8 @@ def get_series_summary(series_id: str, api_key: str) -> Dict[str, Any]:
             try:
                 val_1y = float(obs_1y["value"]) if obs_1y["value"] != "." else 0
                 summary["change_1y"] = summary["current"] - val_1y
-            except (ValueError, TypeError):
-                pass
+            except (ValueError, TypeError) as e:
+                logging.debug(f"Could not parse 1Y ago value for {series_id}: {e}")
 
         # 5 Year Ago
         target_5y = current_date_obj.replace(year=current_date_obj.year - 5)
@@ -413,8 +430,8 @@ def get_series_summary(series_id: str, api_key: str) -> Dict[str, Any]:
             try:
                 val_5y = float(obs_5y["value"]) if obs_5y["value"] != "." else 0
                 summary["change_5y"] = summary["current"] - val_5y
-            except (ValueError, TypeError):
-                pass
+            except (ValueError, TypeError) as e:
+                logging.debug(f"Could not parse 5Y ago value for {series_id}: {e}")
 
         # Compute enhanced metrics
         enhanced = compute_enhanced_metrics(
