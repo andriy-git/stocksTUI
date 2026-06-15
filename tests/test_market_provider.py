@@ -19,8 +19,8 @@ class TestMarketProvider(unittest.TestCase):
         market_provider._news_cache.clear()
         market_provider._market_calendars.clear()
 
-    @patch("stockstui.data_providers.market_provider.yf.Tickers")
-    def test_get_market_price_data_fetches_uncached(self, mock_yf_tickers):
+    @patch("stockstui.data_providers.market_provider.yf.Ticker")
+    def test_get_market_price_data_fetches_uncached(self, mock_yf_ticker):
         """Test that data is fetched for tickers not present in the cache."""
         mock_ticker_obj = MagicMock()
         mock_ticker_obj.info = {
@@ -30,15 +30,16 @@ class TestMarketProvider(unittest.TestCase):
             "regularMarketPreviousClose": 150.0,
         }
         mock_ticker_obj.fast_info = {"lastPrice": 155.0}
-        mock_yf_tickers.return_value.tickers = {"AAPL": mock_ticker_obj}
+        mock_yf_ticker.return_value = mock_ticker_obj
 
         data = market_provider.get_market_price_data(["AAPL"])
         self.assertEqual(data[0]["symbol"], "AAPL")
 
+    @patch("stockstui.data_providers.market_provider.yf.download")
+    @patch("stockstui.data_providers.market_provider.yf.Ticker")
     @patch("stockstui.data_providers.market_provider.get_market_status")
-    @patch("stockstui.data_providers.market_provider.yf.Tickers")
     def test_get_market_price_data_uses_cache(
-        self, mock_yf_tickers, mock_market_status
+        self, mock_market_status, mock_yf_ticker, mock_yf_download
     ):
         """Test that fresh, cached data is used instead of making an API call."""
         now = datetime.now(timezone.utc)
@@ -48,14 +49,13 @@ class TestMarketProvider(unittest.TestCase):
         }
         mock_market_status.return_value = {"is_open": False}
         market_provider.get_market_price_data(["GOOG"])
-        mock_yf_tickers.assert_not_called()
+        mock_yf_ticker.assert_not_called()
+        mock_yf_download.assert_not_called()
 
-    @patch("stockstui.data_providers.market_provider.yf.Tickers")
-    def test_fetch_slow_data_handles_exception(self, mock_yf_tickers):
+    @patch("stockstui.data_providers.market_provider.yf.Ticker")
+    def test_fetch_slow_data_handles_exception(self, mock_yf_ticker):
         """Test graceful failure when fetching slow data fails."""
-        mock_yf_tickers.return_value.tickers.__getitem__.side_effect = Exception(
-            "API Error"
-        )
+        mock_yf_ticker.side_effect = Exception("API Error")
         market_provider._fetch_and_cache_slow_data(["FAIL"])
         self.assertEqual(
             market_provider._price_cache["FAIL"]["data"]["description"],
@@ -95,12 +95,13 @@ class TestMarketProvider(unittest.TestCase):
         self.assertEqual(item["publisher"], "N/A")
         self.assertEqual(item["link"], "#")
 
+    @patch("stockstui.data_providers.market_provider.yf.download")
+    @patch("stockstui.data_providers.market_provider.yf.Ticker")
     @patch("stockstui.data_providers.market_provider.datetime")
     @patch("stockstui.data_providers.market_provider.pd.Timestamp.now")
     @patch("stockstui.data_providers.market_provider.mcal.get_calendar")
-    @patch("stockstui.data_providers.market_provider.yf.Tickers")
     def test_cache_invalidated_after_market_open(
-        self, mock_yf_tickers, mock_get_calendar, mock_pd_now, mock_dt
+        self, mock_get_calendar, mock_pd_now, mock_dt, mock_yf_ticker, mock_yf_download
     ):
         """
         Test that the price cache is correctly invalidated after a new market session opens.
@@ -138,14 +139,20 @@ class TestMarketProvider(unittest.TestCase):
             "exchange": "NYSE",
         }
         mock_ticker_obj1.fast_info = {"lastPrice": 105.0}
-        mock_yf_tickers.return_value.tickers = {"AAPL": mock_ticker_obj1}
+        mock_yf_ticker.return_value = mock_ticker_obj1
+
+        # Mock download for fast data
+        mock_df1 = pd.DataFrame(
+            {( "Close", "AAPL"): [105.0], ("High", "AAPL"): [106.0], ("Low", "AAPL"): [104.0], ("Open", "AAPL"): [100.0], ("Volume", "AAPL"): [1000]},
+            index=[day1_noon_ny]
+        )
+        mock_df1.columns = pd.MultiIndex.from_tuples(mock_df1.columns)
+        mock_yf_download.return_value = mock_df1
 
         market_provider.get_market_price_data(["AAPL"])
-        self.assertEqual(
-            mock_yf_tickers.call_count,
-            2,
-            "Initial fetch should make two API calls (slow and fast).",
-        )
+        
+        self.assertEqual(mock_yf_ticker.call_count, 1)
+        self.assertEqual(mock_yf_download.call_count, 1)
         self.assertEqual(
             market_provider._price_cache["AAPL"]["data"]["previous_close"], 100.0
         )
@@ -163,17 +170,22 @@ class TestMarketProvider(unittest.TestCase):
             "exchange": "NYSE",
         }
         mock_ticker_obj2.fast_info = {"lastPrice": 110.0}
-        mock_yf_tickers.return_value.tickers = {"AAPL": mock_ticker_obj2}
+        mock_yf_ticker.return_value = mock_ticker_obj2
+
+        mock_df2 = pd.DataFrame(
+            {( "Close", "AAPL"): [110.0], ("High", "AAPL"): [111.0], ("Low", "AAPL"): [109.0], ("Open", "AAPL"): [105.0], ("Volume", "AAPL"): [1100]},
+            index=[day2_noon_ny]
+        )
+        mock_df2.columns = pd.MultiIndex.from_tuples(mock_df2.columns)
+        mock_yf_download.return_value = mock_df2
 
         # 4. --- Trigger the function again (no force refresh) ---
         market_provider.get_market_price_data(["AAPL"], force_refresh=False)
 
         # 5. --- Assert the correct behavior ---
-        self.assertEqual(
-            mock_yf_tickers.call_count,
-            4,
-            "The API was not called again on the new day; the stale cache was used.",
-        )
+        # It should have called Ticker again because of expiry
+        self.assertEqual(mock_yf_ticker.call_count, 2)
+        self.assertEqual(mock_yf_download.call_count, 2)
         self.assertEqual(
             market_provider._price_cache["AAPL"]["data"]["previous_close"], 105.0
         )
@@ -248,47 +260,54 @@ class TestMarketProvider(unittest.TestCase):
         )
         self.assertEqual(status["status"], "closed", "Should be closed at 2:00 AM")
 
-    @patch("stockstui.data_providers.market_provider.yf.Tickers")
-    def test_fast_data_does_not_overwrite_with_none(self, mock_yf_tickers):
-        """Test that fast data updates do not overwrite valid cached data with None values."""
-        # 1. Populate the cache with valid slow data
+    @patch("stockstui.data_providers.market_provider.yf.download")
+    def test_fast_data_does_not_overwrite_with_none(self, mock_yf_download):
+        """
+        Test that if fast data returns None for day_high/day_low,
+        it does NOT overwrite existing valid values in the cache.
+        """
+        # 1. Setup cache with valid "slow" data
         market_provider._price_cache["AAPL"] = {
             "expiry": datetime.now(timezone.utc) + timedelta(hours=1),
             "data": {
                 "symbol": "AAPL",
                 "price": 150.0,
-                "day_low": 145.0,
                 "day_high": 155.0,
-                "volume": 1000000,
-                "open": 148.0,
-                "market_cap": 2000000000000,
-                "currency": "USD"
-            }
+                "day_low": 145.0,
+                "volume": 1000,
+            },
         }
 
-        # 2. Setup mock fast_info return containing some None values (e.g. day_low is None)
-        mock_ticker = MagicMock()
-        mock_ticker.fast_info = {
-            "lastPrice": 152.0,
-            "dayLow": None,
-            "dayHigh": 156.0,
-            "lastVolume": None,
-            "open": 149.0,
-            "marketCap": 2010000000000,
-            "currency": "USD"
-        }
-        mock_yf_tickers.return_value.tickers = {"AAPL": mock_ticker}
+        # 2. Simulate fast data fetch returning NaN for high/low
+        # In pandas, missing values are typically NaN.
+        import numpy as np
+        mock_df = pd.DataFrame(
+            {
+                ("Close", "AAPL"): [151.0],
+                ("High", "AAPL"): [np.nan],
+                ("Low", "AAPL"): [np.nan],
+                ("Open", "AAPL"): [150.0],
+                ("Volume", "AAPL"): [1100],
+            },
+            index=[pd.Timestamp.now(tz="UTC")]
+        )
+        mock_df.columns = pd.MultiIndex.from_tuples(mock_df.columns)
+        mock_yf_download.return_value = mock_df
 
-        # 3. Trigger _fetch_fast_data through get_market_price_data when market is open
-        with patch("stockstui.data_providers.market_provider.get_market_status") as mock_status:
-            mock_status.return_value = {"is_open": True}
+        # 3. Trigger update
+        with patch(
+            "stockstui.data_providers.market_provider.get_market_status",
+            return_value={"is_open": True},
+        ):
+            data = market_provider.get_market_price_data(["AAPL"])
 
-            market_provider._info_cache["AAPL"] = {"exchange": "NYSE"}
-            market_provider.get_market_price_data(["AAPL"])
-
-            # Verify the price was updated, but day_low and volume were NOT overwritten with None
-            aapl_data = market_provider._price_cache["AAPL"]["data"]
-            self.assertEqual(aapl_data["price"], 152.0)
-            self.assertEqual(aapl_data["day_low"], 145.0)
-            self.assertEqual(aapl_data["volume"], 1000000)
-            self.assertEqual(aapl_data["day_high"], 156.0)
+        # 4. Verify results
+        result = data[0]
+        self.assertEqual(result["price"], 151.0, "Price should update from fast data")
+        self.assertEqual(result["volume"], 1100, "Volume should update from fast data")
+        self.assertEqual(
+            result["day_high"], 155.0, "Day high should NOT be overwritten by None/NaN"
+        )
+        self.assertEqual(
+            result["day_low"], 145.0, "Day low should NOT be overwritten by None/NaN"
+        )
