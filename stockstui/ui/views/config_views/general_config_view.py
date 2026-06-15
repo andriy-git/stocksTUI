@@ -79,50 +79,50 @@ class GeneralConfigView(Vertical):
 
     def on_mount(self) -> None:
         """Called when the view is mounted."""
-        self._loading = True
-        try:
-            self.repopulate_visible_tabs()
-        finally:
-            self._loading = False
+        self.repopulate_visible_tabs()
 
     def repopulate_visible_tabs(self):
         """Populates the visible tabs list view."""
-        view = self.query_one("#visible-tabs-list-view", ListView)
-        view.clear()
+        self._loading = True
+        try:
+            view = self.query_one("#visible-tabs-list-view", ListView)
+            view.clear()
 
-        hidden_tabs = self.app.config.get_setting("hidden_tabs", [])
+            hidden_tabs = self.app.config.get_setting("hidden_tabs", [])
 
-        # Combine static tabs with dynamic lists from config
-        # Static tabs: All, History, News
-        # Dynamic lists: Stocks, Currencies, etc. (keys in self.app.config.lists)
+            # Combine static tabs with dynamic lists from config
+            # Static tabs: All, History, News
+            # Dynamic lists: Stocks, Currencies, etc. (keys in self.app.config.lists)
 
-        # Start with "All"
-        all_tabs = ["all"]
+            # Start with "All"
+            all_tabs = ["all"]
 
-        # Add dynamic lists
-        if hasattr(self.app.config, "lists"):
-            all_tabs.extend(list(self.app.config.lists.keys()))
+            # Add dynamic lists
+            if hasattr(self.app.config, "lists"):
+                all_tabs.extend(list(self.app.config.lists.keys()))
 
-        # Add other static tabs
-        all_tabs.extend(["history", "news", "options", "fred", "debug"])
+            # Add other static tabs
+            all_tabs.extend(["history", "news", "options", "fred", "debug"])
 
-        # Remove duplicates and preserve order (though dict keys are ordered in recent Python)
-        seen = set()
-        unique_tabs = []
-        for t in all_tabs:
-            if t not in seen:
-                unique_tabs.append(t)
-                seen.add(t)
+            # Remove duplicates and preserve order (though dict keys are ordered in recent Python)
+            seen = set()
+            unique_tabs = []
+            for t in all_tabs:
+                if t not in seen:
+                    unique_tabs.append(t)
+                    seen.add(t)
 
-        for tab in unique_tabs:
-            visible = tab not in hidden_tabs
-            item_content = Horizontal(
-                Label(tab.replace("_", " ").capitalize(), classes="column-label"),
-                Switch(value=visible, classes="tab-switch"),
-                classes="column-item-layout",
-            )
-            item = ListItem(item_content, name=tab)
-            view.append(item)
+            for tab in unique_tabs:
+                visible = tab not in hidden_tabs
+                item_content = Horizontal(
+                    Label(tab.replace("_", " ").capitalize(), classes="column-label"),
+                    Switch(value=visible, classes="tab-switch"),
+                    classes="column-item-layout",
+                )
+                item = ListItem(item_content, name=tab)
+                view.append(item)
+        finally:
+            self._loading = False
 
     @on(Button.Pressed, "#update-refresh-interval")
     def on_update_refresh_button_pressed(self):
