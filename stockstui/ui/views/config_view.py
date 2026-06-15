@@ -57,7 +57,7 @@ class ConfigContainer(Vertical):
         try:
             self.query(f"#{view_id}").first().focus()
         except NoMatches:
-            pass
+            logging.debug(f"View #{view_id} not found for focus")
 
     def action_go_back(self) -> bool:
         """
@@ -71,7 +71,7 @@ class ConfigContainer(Vertical):
             try:
                 self.query(f"#{previous_view_id}").first().focus()
             except NoMatches:
-                pass
+                logging.debug(f"Previous view #{previous_view_id} not found for focus")
             return True
         return False
 
@@ -86,7 +86,7 @@ class ConfigContainer(Vertical):
         try:
             self.query("#main").first().focus()
         except NoMatches:
-            pass
+            logging.debug("Main view not found for focus")
 
     def show_general(self):
         """Switches to the general settings view."""
