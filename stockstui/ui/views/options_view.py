@@ -1,3 +1,4 @@
+import math
 from textual.containers import Vertical, Horizontal, Container
 from textual.widgets import (
     Input,
@@ -162,26 +163,14 @@ class OptionsView(Vertical):
             muted_color = self.app.theme_variables.get("text-muted", "dim")
             accent_color = self.app.theme_variables.get("accent", "blue")
 
-            # Create ContentSwitcher for Table/Chart views
-            switcher = ContentSwitcher(
-                initial="options-tables-view", id="options-content-switcher"
-            )
-
-            # --- TABLE VIEW ---
-            # Create horizontal container for tables
-            tables_container = Horizontal(
-                classes="options-tables-container", id="options-tables-view"
-            )
-
             # Helper to create table
             def create_table(df, table_id, label_text, is_call):
-                section = Vertical(classes="options-table-section")
                 label = Label(label_text, classes="options-table-header")
                 table = DataTable(id=table_id, zebra_stripes=True)
                 table.cursor_type = "row"
 
                 if df.empty:
-                    return section, label, table
+                    return Vertical(label, table, classes="options-table-section")
 
                 table.add_columns(
                     "Strike",
@@ -243,8 +232,6 @@ class OptionsView(Vertical):
                         pct_change_text.stylize(muted_color)
 
                     # Handle NaN values for volume and openInterest
-                    import math
-
                     volume_val = row.get("volume", 0)
                     oi_val = row.get("openInterest", 0)
 
@@ -304,42 +291,36 @@ class OptionsView(Vertical):
                         key=contract_symbol,  # Store symbol as row key
                     )
 
-                return section, label, table
-
-            # --- TABLE VIEW ---
-            tables_container = Horizontal(id="options-tables-view")
+                return Vertical(label, table, classes="options-table-section")
 
             # Create calls and puts tables
-            calls_section, calls_label, calls_table = create_table(
+            calls_section = create_table(
                 calls_df, "options-calls-table", "Calls", True
             )
-            puts_section, puts_label, puts_table = create_table(
+            puts_section = create_table(
                 puts_df, "options-puts-table", "Puts", False
             )
 
+            # Create Horizontal tables_container with sections as children
+            tables_container = Horizontal(
+                calls_section, puts_section,
+                classes="options-tables-container", id="options-tables-view"
+            )
+
             # --- CHART VIEW ---
-            chart_container = Container(id="options-chart-view")
             chart = OIChart(
                 calls_df, puts_df, underlying_price, ticker=self.app.options_ticker, currency_symbol=sym
             )
+            chart_container = Container(chart, id="options-chart-view")
 
-            # Mount switcher to display_container FIRST (top of hierarchy)
+            # Create ContentSwitcher switcher with containers as children
+            switcher = ContentSwitcher(
+                tables_container, chart_container,
+                initial="options-tables-view", id="options-content-switcher"
+            )
+
+            # Single mount call attaches the entire tree at once
             await display_container.mount(switcher)
-
-            # Now mount children to switcher (tables_container and chart_container)
-            await switcher.mount(tables_container)
-            await switcher.mount(chart_container)
-
-            # Now mount sections to tables_container
-            await tables_container.mount(calls_section)
-            await tables_container.mount(puts_section)
-
-            # Now mount widgets to sections
-            await calls_section.mount(calls_label, calls_table)
-            await puts_section.mount(puts_label, puts_table)
-
-            # Mount chart to chart_container
-            await chart_container.mount(chart)
 
         except NoMatches:
             pass
