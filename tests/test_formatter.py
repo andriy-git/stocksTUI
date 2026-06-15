@@ -231,6 +231,23 @@ class TestFormatter(unittest.IsolatedAsyncioTestCase):
         rows_err = formatter.format_info_comparison({}, {})
         self.assertEqual(rows_err[0][0], "Error")
 
+        # Test handling of objects that raise exceptions during key lookup (like yfinance's FastInfo)
+        class ExceptionThrowingDict(dict):
+            def keys(self):
+                return ["currency", "lastPrice"]
+            def get(self, key, default=None):
+                if key == "currency":
+                    raise KeyError("currency")
+                return super().get(key, default)
+
+        fast_raising = ExceptionThrowingDict({"lastPrice": 100})
+        slow = {"currency": "USD", "lastPrice": 100}
+        rows_raising = formatter.format_info_comparison(fast_raising, slow)
+
+        # Check that 'currency' was safely handled and set to "N/A" for fast_info
+        row_currency = next(r for r in rows_raising if r[0] == "currency")
+        self.assertEqual(row_currency, ("currency", "N/A", "USD", False))
+
     def test_escape(self):
         """Test escaping special characters for Rich markdown."""
         text = "Hello [World] *"
