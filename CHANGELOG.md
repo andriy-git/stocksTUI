@@ -1,5 +1,51 @@
 # Change Log
 
+## [0.1.0-b13] 2026-06-15
+
+### Added
+-   `feat(fred-view)`: Implement concurrent data fetching with `ThreadPoolExecutor` and enhanced colored metric visualization
+-   `feat(db)`: Add currency tracking to ticker_info table with migration support and improved transaction safety
+-   `feat(oi_chart)`: Allow customization of currency symbol in plot title
+-   `feat(options)`: Integrate dynamic currency symbols into Options View for prices, metrics, and chart
+-   `feat(config)`: Add TUI log suppression setting with UI switch in general configuration
+-   `feat(config)`: Add UI switch to control FRED tab visibility
+-   `feat(formatter)`: Implement dynamic currency symbol support (`get_currency_symbol`) across price and historical tables
+-   `feat(cli)`: Implement dynamic currency symbol support across CLI reporting
+-   `feat(data)`: Enhance currency handling and metadata consistency across price cache, info, and historical data
+
+### Fixed
+-   `fix(config-view)`: Add debug logging for missing widgets in list configuration
+-   `fix(ui)`: Add debug logging for missing views in config module
+-   `fix(ui)`: Improve error logging in PositionModal for invalid numeric input
+-   `fix(loghandler)`: Log explicit error on shutdown race condition instead of silent ignore
+-   `fix(logging)`: Respect TUI log suppression setting in TextualHandler
+-   `fix(db_manager)`: Improve test reliability for data persistence and exchange info
+
+### Changed
+-   `refactor(config-view)`: Standardize and improve tab list generation in General Settings
+-   `refactor(options-view)`: Simplify widget composition using ContentSwitcher
+-   `refactor(market_provider)`: Optimize data fetching with batching, thread pooling, and improved caching
+-   `refactor(fred_provider)`: Optimize historical date lookups with binary search using `bisect`
+-   `refactor(formatter)`: Improve historical data rendering performance and info comparison robustness
+-   `refactor(config)`: Use 2-space indentation for JSON configuration files
+-   `refactor(core)`: Overhaul application initialization, state management, and tab switching logic
+
+### Build
+-   `build(install)`: Expand cache cleanup to include virtual environments and general pyc files
+
+### Test
+-   `test(format)`: Improve unit testing fidelity for yfinance output formatting
+-   `test(market-provider)`: Enhance mocking fidelity and add tests for fast data behavior
+-   `test(formatter)`: Enhance test coverage for data formatting utilities and exception handling
+-   `test(fred)`: Refactor and expand FredView tests, improve integration tests for series summary
+-   `test(fred)`: Add unit tests for EditFredSeriesModal
+-   `test(config)`: Add unit tests for PortfolioConfigView and navigation tests for MainConfigView
+-   `test(logging)`: Implement unit tests for log suppression logic in TextualHandler
+-   `test(currency)`: Add unit tests for currency symbol formatting
+-   `test(views)`: Use AsyncMock for improved asynchronous testing support
+-   `test(fred-config)`: Add visibility toggle test and improve test reliability
+-   `test(yfinance)`: Add comprehensive unit tests for full output formatting and comparison
+
 ## [0.1.0-b12] 2026-01-19 
 
 ### Changed
