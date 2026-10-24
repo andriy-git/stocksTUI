@@ -96,6 +96,7 @@ def format_price_data_for_table(
             f"{sym}{previous_close:,.2f}" if previous_close is not None else "N/A"
         )
 
+        dividend_yield = item.get("dividend_yield")
         all_time_high = item.get("all_time_high")
         pct_off_ath = None
         if price is not None and all_time_high is not None and all_time_high != 0:
@@ -120,8 +121,8 @@ def format_price_data_for_table(
                 "Market Cap": f"{item.get('market_cap', 0):,}"
                 if item.get("market_cap")
                 else "N/A",
-                "Div Yield": f"{item.get('dividend_yield', 0):.2f}%"
-                if item.get("dividend_yield")
+                "Div Yield": f"{dividend_yield * 100:.2f}%"
+                if dividend_yield is not None
                 else "N/A",
                 "EPS": f"{item.get('eps', 0):.2f}" if item.get("eps") else "N/A",
                 "Beta": f"{item.get('beta', 0):.2f}" if item.get("beta") else "N/A",

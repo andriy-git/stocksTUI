@@ -82,6 +82,20 @@ class TestFormatter(unittest.IsolatedAsyncioTestCase):
             row["_change_direction"], "up"
         )  # Price increased vs old_prices
 
+    def test_dividend_yield_is_formatted_as_percent_of_fractional_input(self):
+        """Keep fractional provider yields and valid zero yields readable."""
+        sample_data = [
+            {"symbol": "SYNTH", "dividend_yield": 0.025},
+            {"symbol": "ZERO", "dividend_yield": 0.0},
+            {"symbol": "MISSING", "dividend_yield": None},
+        ]
+
+        rows = formatter.format_price_data_for_table(sample_data, {}, {})
+
+        self.assertEqual(rows[0]["Div Yield"], "2.50%")
+        self.assertEqual(rows[1]["Div Yield"], "0.00%")
+        self.assertEqual(rows[2]["Div Yield"], "N/A")
+
     def test_format_price_data_direction_down(self):
         """Test that change direction is 'down' when price decreases."""
         sample_data = [{"symbol": "TSLA", "price": 800.0}]
